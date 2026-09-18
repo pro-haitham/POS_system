@@ -22,8 +22,13 @@ if ($method === 'GET') {
         echo json_encode(['success' => true]);
     } elseif (isset($data['action']) && $data['action'] === 'update_stock') {
         // Updating stock and location
-        $stmt = $pdo->prepare("UPDATE products SET stock_quantity = ?, storage_location = ? WHERE id = ?");
-        $stmt->execute([$data['stock'], $data['location'] ?? '', $data['id']]);
+        if (isset($data['location'])) {
+            $stmt = $pdo->prepare("UPDATE products SET stock_quantity = ?, storage_location = ? WHERE id = ?");
+            $stmt->execute([$data['stock'], $data['location'], $data['id']]);
+        } else {
+            $stmt = $pdo->prepare("UPDATE products SET stock_quantity = ? WHERE id = ?");
+            $stmt->execute([$data['stock'], $data['id']]);
+        }
         echo json_encode(['success' => true]);
     } else {
         if (!empty($data['name']) && is_numeric($data['price'])) {

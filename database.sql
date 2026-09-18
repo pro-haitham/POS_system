@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS `products` (
   `unit` varchar(50) NOT NULL DEFAULT 'قطعة', -- e.g., قطعة, مل, كرتونة
   `price` decimal(10,2) NOT NULL DEFAULT '0.00',
   `stock_quantity` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `storage_location` varchar(255) DEFAULT '',
   PRIMARY KEY (`id`),
   FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -27,15 +28,17 @@ CREATE TABLE IF NOT EXISTS `customers` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Inserting a default "General Customer"
-INSERT INTO `customers` (`id`, `name`, `phone`, `total_debt`) VALUES (1, 'عميل عام', '', 0.00) ON DUPLICATE KEY UPDATE `id`=1;
+-- Inserting a default "Walk-in Customer"
+INSERT INTO `customers` (`id`, `name`, `phone`, `total_debt`) VALUES (1, 'عميل عابر (نقدي)', '', 0.00) ON DUPLICATE KEY UPDATE `id`=1;
 
 CREATE TABLE IF NOT EXISTS `bills` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `type` enum('sale','purchase') NOT NULL DEFAULT 'sale',
-  `payment_method` enum('cash','card','deposit') NOT NULL DEFAULT 'cash',
+  `payment_method` varchar(50) NOT NULL DEFAULT 'cash',
+  `payment_method2` varchar(50) DEFAULT NULL,
   `total_amount` decimal(10,2) NOT NULL DEFAULT '0.00',
   `paid_amount` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `paid_amount2` decimal(10,2) NOT NULL DEFAULT '0.00',
   `customer_id` int(11) DEFAULT NULL,
   `cashier_name` varchar(255) DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -59,8 +62,12 @@ CREATE TABLE IF NOT EXISTS `payments` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `customer_id` int(11) NOT NULL,
   `amount` decimal(10,2) NOT NULL,
+  `type` enum('payment','debt') NOT NULL DEFAULT 'payment',
   `note` text DEFAULT NULL,
+  `bill_id` int(11) DEFAULT NULL,
+  `items_details` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE CASCADE
+  FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`bill_id`) REFERENCES `bills`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

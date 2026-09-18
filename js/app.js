@@ -12,8 +12,22 @@ const app = {
         this.setupPOSSearch();
         this.setupInventorySearch();
         
-        // Default dates for reports
-        document.getElementById('report-date').valueAsDate = new Date();
+        // Default dates for reports to today's local date
+        this.setReportDateToday(false);
+    },
+
+    setReportDateToday(autoLoad = true) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        document.getElementById('report-date').value = `${year}-${month}-${day}`;
+        if (autoLoad) this.loadReports();
+    },
+
+    setReportDateAll() {
+        document.getElementById('report-date').value = '';
+        this.loadReports();
     },
 
     setupNavigation() {
@@ -274,31 +288,233 @@ const app = {
     },
 
     // --- CUSTOMERS & PAYMENTS ---
+    currentDebtAction: 'pay_debt',
+    isSplitPayment: false,
+
     async loadCustomers() {
         this.customers = await this.fetchAPI('api/customers.php');
         this.renderCustomers();
     },
 
-    renderCustomers() {
+    switchDebtAction(action) {
+        this.currentDebtAction = action;
+        const amountLabel = document.getElementById('pay-amount-label');
+        const submitBtn = document.getElementById('btn-debt-submit');
+        const itemsContainer = document.getElementById('payment-items-container');
+        
+        if (action === 'add_debt') {
+            if (amountLabel) amountLabel.innerText = 'المبلغ المطلوب إضافته كدين (ريال):';
+            if (itemsContainer) itemsContainer.style.display = 'block';
+            if (submitBtn) {
+                submitBtn.className = 'btn btn-danger w-100 py-2 fw-bold';
+                submitBtn.innerHTML = '<i class="fas fa-plus-circle"></i> قيد الدين على العميل';
+            }
+        } else {
+            if (amountLabel) amountLabel.innerText = 'المبلغ المدفوع (ريال):';
+            if (itemsContainer) itemsContainer.style.display = 'none';
+            if (submitBtn) {
+                submitBtn.className = 'btn btn-success w-100 py-2 fw-bold';
+                submitBtn.innerHTML = '<i class="fas fa-save"></i> تسجيل سداد الدفعة';
+            }
+        }
+    },
+
+    async executeDebtAction() {
+        const customerId = document.getElementById('payment-customer').value;
+        const amount = document.getElementById('payment-amount').value;
+        const note = document.getElementById('payment-note').value;
+        const itemsDetails = document.getElementById('payment-items-details') ? document.getElementById('payment-items-details').value : '';
+
+        if (!customerId) return alert('الرجاء اختيار العميل أولاً');
+        if (!amount || parseFloat(amount) <= 0) return alert('الرجاء إدخال مبلغ صحيح أكبر من الصفر');
+
+        const res = await this.fetchAPI('api/payments.php', {
+            method: 'POST',
+            body: JSON.stringify({
+                customer_id: customerId,
+                amount: parseFloat(amount),
+                action: this.currentDebtAction,
+                note: note,
+                items_details: itemsDetails
+            })
+        });
+
+        if (res && res.success) {
+            this.showToast(this.currentDebtAction === 'add_debt' ? 'تم قيد الدين وتفاصيل المشتريات بنجاح' : 'تم تسجيل السداد بنجاح');
+            document.getElementById('payment-amount').value = '';
+            document.getElementById('payment-note').value = '';
+            if (document.getElementById('payment-items-details')) {
+                document.getElementById('payment-items-details').value = '';
+            }
+            await this.loadCustomers();
+        } else {
+            alert(res.error || 'حدث خطأ أثناء تنفيذ العملية');
+        }
+    },
+
+    quickOpenDebt(customerId, action) {
+        const radio = action === 'add_debt' ? document.getElementById('act_add') : document.getElementById('act_pay');
+        if (radio) {
+            radio.checked = true;
+            this.switchDebtAction(action);
+        }
+        const select = document.getElementById('payment-customer');
+        if (select) {
+            select.value = customerId;
+        }
+        const amtInput = document.getElementById('payment-amount');
+        if (amtInput) {
+            amtInput.focus();
+        }
+    },
+
+    async showCustomerStatement(customerId) {
+        const cust = this.customers.find(c => c.id == customerId);
+        if (!cust) return;
+
+        document.getElementById('stmt-cust-name').innerText = cust.name;
+        document.getElementById('stmt-cust-phone').innerText = cust.phone ? `الهاتف: ${cust.phone}` : 'بدون هاتف';
+        const debt = parseFloat(cust.total_debt || 0);
+        document.getElementById('stmt-cust-debt').innerText = `${debt.toFixed(2)} ريال`;
+
+        const tbody = document.getElementById('stmt-items-body');
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">جاري تحميل سجل الحركات والمشتريات...</td></tr>`;
+
+        const modalEl = document.getElementById('customerStatementModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+
+        const res = await this.fetchAPI(`api/payments.php?customer_id=${customerId}`);
+        tbody.innerHTML = '';
+
+        if (!res || res.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-3">لا توجد حركات ديون أو سداد مسجلة لهذا العميل حتى الآن</td></tr>`;
+            return;
+        }
+
+        res.forEach(item => {
+            const isDebt = (item.type === 'debt');
+            let formattedDate = item.created_at;
+            try {
+                const dt = new Date(item.created_at.replace(' ', 'T'));
+                if (!isNaN(dt.getTime())) {
+                    const datePart = item.created_at.split(' ')[0];
+                    const timePart = dt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                    formattedDate = `${datePart} - ${timePart}`;
+                }
+            } catch(e) {}
+
+            const details = item.items_details || item.note || '-';
+            const receiptBtn = item.bill_id ? `
+                <button class="btn btn-sm btn-outline-primary" title="عرض وطباعة إيصال الفاتورة" onclick="app.showReceipt(${item.bill_id})">
+                    <i class="fas fa-file-invoice"></i> إيصال #${item.bill_id}
+                </button>
+            ` : '<span class="text-muted small">قيد يدوي</span>';
+
+            tbody.innerHTML += `
+                <tr>
+                    <td class="fw-bold">#${item.id}</td>
+                    <td>${formattedDate}</td>
+                    <td>
+                        <span class="badge ${isDebt ? 'bg-danger' : 'bg-success'}">
+                            ${isDebt ? 'قيد دين (+)' : 'سداد دفعة (-)'}
+                        </span>
+                    </td>
+                    <td class="fw-bold ${isDebt ? 'text-danger fs-6' : 'text-success'}">${parseFloat(item.amount).toFixed(2)}</td>
+                    <td class="text-start">${details}</td>
+                    <td>${receiptBtn}</td>
+                </tr>
+            `;
+        });
+    },
+
+    renderCustomers(filteredList = null) {
         const tbody = document.getElementById('customers-table');
         const posSelect = document.getElementById('pos-customer');
         const paySelect = document.getElementById('payment-customer');
         
+        const listToRender = filteredList !== null ? filteredList : this.customers;
+
         tbody.innerHTML = '';
-        posSelect.innerHTML = '';
-        paySelect.innerHTML = '<option value="">اختر العميل</option>';
+        if (posSelect) posSelect.innerHTML = '';
+        if (paySelect) paySelect.innerHTML = '<option value="">-- اختر العميل --</option>';
         
+        let totalOutstandingDebt = 0;
+        let indebtedCount = 0;
+        let registeredCount = 0;
+        let hasWalkIn = false;
+
         this.customers.forEach(c => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${c.name}</td>
-                    <td>${c.phone || '-'}</td>
-                    <td class="${c.total_debt > 0 ? 'text-danger font-weight-bold' : ''}">${c.total_debt}</td>
-                </tr>
-            `;
-            posSelect.innerHTML += `<option value="${c.id}">${c.name} ${c.phone ? ' - '+c.phone : ''} ${c.total_debt > 0 ? '(مدين)' : ''}</option>`;
-            if (c.id != 1) paySelect.innerHTML += `<option value="${c.id}">${c.name} (الدين: ${c.total_debt})</option>`;
+            const isWalkIn = (c.id == 1 || c.name.includes('عابر') || c.name.includes('عام'));
+            if (isWalkIn) hasWalkIn = true;
+            else registeredCount++;
+
+            const debt = parseFloat(c.total_debt || 0);
+            if (debt > 0) {
+                totalOutstandingDebt += debt;
+                indebtedCount++;
+            }
+
+            if (posSelect) {
+                const displayName = isWalkIn ? 'عميل عابر (نقدي - بدون تسجيل)' : `${c.name} ${c.phone ? ' ('+c.phone+')' : ''} ${debt > 0 ? ' [دين: '+debt.toFixed(2)+']' : ''}`;
+                posSelect.innerHTML += `<option value="${c.id}" ${isWalkIn ? 'selected' : ''}>${displayName}</option>`;
+            }
+            
+            if (!isWalkIn && paySelect) {
+                paySelect.innerHTML += `<option value="${c.id}">${c.name} ${c.phone ? ' ('+c.phone+')' : ''} (الدين: ${debt.toFixed(2)})</option>`;
+            }
         });
+
+        if (!hasWalkIn && posSelect) {
+            posSelect.insertAdjacentHTML('afterbegin', `<option value="1" selected>عميل عابر (نقدي - بدون تسجيل)</option>`);
+        }
+
+        // Summary cards
+        const sumDebtEl = document.getElementById('cust-sum-total-debt');
+        const sumIndebtedEl = document.getElementById('cust-sum-indebted-count');
+        const sumTotalEl = document.getElementById('cust-sum-total-count');
+        if (sumDebtEl) sumDebtEl.innerText = totalOutstandingDebt.toFixed(2);
+        if (sumIndebtedEl) sumIndebtedEl.innerText = indebtedCount;
+        if (sumTotalEl) sumTotalEl.innerText = registeredCount;
+
+        // Table Rows
+        if (listToRender.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-4">لا يوجد عملاء مطابقين للبحث</td></tr>`;
+        } else {
+            listToRender.forEach(c => {
+                const isWalkIn = (c.id == 1 || c.name.includes('عابر') || c.name.includes('عام'));
+                const debt = parseFloat(c.total_debt || 0);
+                const isDebt = debt > 0;
+
+                tbody.innerHTML += `
+                    <tr class="${isDebt ? 'table-light' : ''}">
+                        <td class="fw-bold">${c.name} ${isWalkIn ? '<span class="badge bg-secondary ms-1">افتراضي</span>' : ''}</td>
+                        <td dir="ltr">${c.phone || '-'}</td>
+                        <td class="fw-bold ${isDebt ? 'text-danger fs-6' : 'text-success'}">${debt.toFixed(2)}</td>
+                        <td>
+                            <span class="badge ${isDebt ? 'bg-danger' : 'bg-success'}">
+                                ${isDebt ? 'مدين' : 'خالص'}
+                            </span>
+                        </td>
+                        <td>
+                            ${!isWalkIn ? `
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-danger" title="قيد دين جديد على العميل" onclick="app.quickOpenDebt(${c.id}, 'add_debt')">
+                                    <i class="fas fa-plus"></i> دين
+                                </button>
+                                <button class="btn btn-outline-success" title="تسجيل سداد دفعة" onclick="app.quickOpenDebt(${c.id}, 'pay_debt')">
+                                    <i class="fas fa-check"></i> سداد
+                                </button>
+                                <button class="btn btn-outline-primary" title="عرض كشف حساب العميل" onclick="app.showCustomerStatement(${c.id})">
+                                    <i class="fas fa-list-alt"></i> كشف حساب
+                                </button>
+                            </div>
+                            ` : '<span class="text-muted small">-</span>'}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
 
         // Initialize Select2 if available
         if (window.jQuery && $.fn.select2) {
@@ -309,6 +525,19 @@ const app = {
         }
     },
 
+    filterCustomersTable(term) {
+        term = (term || '').toLowerCase().trim();
+        if (!term) {
+            this.renderCustomers();
+            return;
+        }
+        const filtered = this.customers.filter(c => 
+            c.name.toLowerCase().includes(term) || 
+            (c.phone && c.phone.includes(term))
+        );
+        this.renderCustomers(filtered);
+    },
+
     async quickAddCustomer() {
         const name = document.getElementById('quick-cust-name').value;
         const phone = document.getElementById('quick-cust-phone').value;
@@ -316,7 +545,7 @@ const app = {
         
         const res = await this.fetchAPI('api/customers.php', { method: 'POST', body: JSON.stringify({ name, phone }) });
         if(res.success) {
-            this.showToast('تمت الإضافة');
+            this.showToast('تمت الإضافة بنجاح');
             document.getElementById('quick-cust-name').value = '';
             document.getElementById('quick-cust-phone').value = '';
             
@@ -341,23 +570,9 @@ const app = {
         
         const res = await this.fetchAPI('api/customers.php', { method: 'POST', body: JSON.stringify({ name, phone }) });
         if(res.success) {
-            this.showToast('تمت الإضافة');
+            this.showToast('تمت إضافة العميل بنجاح');
             document.getElementById('cust-name').value = '';
             document.getElementById('cust-phone').value = '';
-            this.loadCustomers();
-        } else alert(res.error);
-    },
-
-    async makePayment() {
-        const customer_id = document.getElementById('payment-customer').value;
-        const amount = document.getElementById('payment-amount').value;
-        
-        if(!customer_id || !amount) return alert('الرجاء تعبئة البيانات');
-        
-        const res = await this.fetchAPI('api/payments.php', { method: 'POST', body: JSON.stringify({ customer_id, amount }) });
-        if(res.success) {
-            this.showToast('تم السداد بنجاح');
-            document.getElementById('payment-amount').value = '';
             this.loadCustomers();
         } else alert(res.error);
     },
@@ -444,6 +659,65 @@ const app = {
         this.renderCart();
     },
 
+    toggleSplitPayment(isSplit) {
+        this.isSplitPayment = isSplit;
+        const singleContainer = document.getElementById('pos-single-payment-container');
+        const splitContainer = document.getElementById('pos-split-payment-container');
+        
+        if (isSplit) {
+            if (singleContainer) singleContainer.classList.add('d-none');
+            if (splitContainer) splitContainer.classList.remove('d-none');
+            
+            const total = this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const amt1El = document.getElementById('pos-split-amount-1');
+            const amt2El = document.getElementById('pos-split-amount-2');
+            
+            if (amt1El && (!amt1El.value || parseFloat(amt1El.value) === 0)) {
+                amt1El.value = total > 0 ? (total / 2).toFixed(2) : 0;
+            }
+            this.calculateSplitRemainder();
+        } else {
+            if (singleContainer) singleContainer.classList.remove('d-none');
+            if (splitContainer) splitContainer.classList.add('d-none');
+            this.renderCart();
+        }
+    },
+
+    calculateSplitRemainder() {
+        const total = this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const amt1El = document.getElementById('pos-split-amount-1');
+        const amt2El = document.getElementById('pos-split-amount-2');
+        
+        let amt1 = parseFloat(amt1El ? amt1El.value : 0) || 0;
+        if (amt1 < 0) amt1 = 0;
+        if (amt1 > total) amt1 = total;
+        if (amt1El) amt1El.value = amt1;
+
+        let rem = Math.max(0, total - amt1);
+        if (amt2El) amt2El.value = rem.toFixed(2);
+
+        this.updateSplitTotalIndicator();
+    },
+
+    updateSplitTotalIndicator() {
+        const total = this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+        const m1 = document.getElementById('pos-split-method-1')?.value || 'cash';
+        const m2 = document.getElementById('pos-split-method-2')?.value || 'deposit';
+        const amt1 = parseFloat(document.getElementById('pos-split-amount-1')?.value || 0) || 0;
+        const amt2 = parseFloat(document.getElementById('pos-split-amount-2')?.value || 0) || 0;
+        
+        const collected1 = (m1 !== 'deposit') ? amt1 : 0;
+        const collected2 = (m2 !== 'deposit') ? amt2 : 0;
+        const totalPaid = collected1 + collected2;
+        const debt = Math.max(0, total - totalPaid);
+
+        const paidEl = document.getElementById('pos-split-total-paid');
+        const remEl = document.getElementById('pos-split-remainder');
+        
+        if (paidEl) paidEl.innerText = totalPaid.toFixed(2);
+        if (remEl) remEl.innerText = debt.toFixed(2);
+    },
+
     renderCart() {
         const tbody = document.getElementById('cart-items');
         tbody.innerHTML = '';
@@ -464,37 +738,67 @@ const app = {
 
         document.getElementById('cart-total').innerText = total.toFixed(2);
         
-        // Auto set paid amount if cash or card
-        const pm = document.getElementById('pos-payment-method').value;
-        if(pm !== 'deposit') {
-            document.getElementById('pos-paid-amount').value = total.toFixed(2);
+        if (this.isSplitPayment) {
+            this.calculateSplitRemainder();
         } else {
-            document.getElementById('pos-paid-amount').value = 0;
+            // Auto set paid amount if cash or card
+            const pm = document.getElementById('pos-payment-method').value;
+            if(pm !== 'deposit') {
+                document.getElementById('pos-paid-amount').value = total.toFixed(2);
+            } else {
+                document.getElementById('pos-paid-amount').value = 0;
+            }
         }
     },
 
     async submitBill() {
         if(this.cart.length === 0) return alert('الفاتورة فارغة');
         
-        const paymentMethod = document.getElementById('pos-payment-method').value;
-        const customerId = document.getElementById('pos-customer').value;
-
-        // Customer Validation: Must have a valid customer with a phone number
+        let customerId = document.getElementById('pos-customer').value || 1;
         const cust = this.customers.find(c => c.id == customerId);
-        if (!cust || !cust.phone || customerId == 1 || cust.name.includes('عام')) {
-            return alert('لا يمكن تسجيل الفاتورة. يرجى اختيار عميل مسجل برقم هاتف، أو إضافة عميل جديد باستخدام الزر الجانبي.');
+        const isWalkIn = (!cust || customerId == 1 || cust.name.includes('عابر') || cust.name.includes('عام'));
+
+        let paymentMethod = 'cash';
+        let paymentMethod2 = null;
+        let paid = 0;
+        let paid2 = 0;
+        let total = this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+
+        if (this.isSplitPayment) {
+            paymentMethod = document.getElementById('pos-split-method-1').value;
+            paid = parseFloat(document.getElementById('pos-split-amount-1').value) || 0;
+            paymentMethod2 = document.getElementById('pos-split-method-2').value;
+            paid2 = parseFloat(document.getElementById('pos-split-amount-2').value) || 0;
+
+            const totalPaid = paid + paid2;
+            const remainingDebt = total - totalPaid;
+
+            // If there is an unpaid remainder or any method is deposit, customer cannot be walk-in
+            if (remainingDebt > 0 || paymentMethod === 'deposit' || paymentMethod2 === 'deposit') {
+                if (isWalkIn || !cust || !cust.phone) {
+                    return alert('وجود متبقي آجل (دين) يتطلب تحديد عميل مسجل ولديه رقم هاتف! يرجى اختيار عميل أو إضافته عبر زر (+) الجانبي.');
+                }
+            }
+        } else {
+            paymentMethod = document.getElementById('pos-payment-method').value;
+            paid = parseFloat(document.getElementById('pos-paid-amount').value) || 0;
+            
+            if (paymentMethod === 'deposit' || (total - paid) > 0) {
+                if (isWalkIn || !cust || !cust.phone) {
+                    return alert('البيع الآجل (دين) يتطلب تحديد عميل مسجل ولديه رقم هاتف! يرجى اختيار عميل أو إضافته عبر زر (+) الجانبي.');
+                }
+            }
         }
 
-        let total = this.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-        let paid = parseFloat(document.getElementById('pos-paid-amount').value) || 0;
-        
         const data = {
             type: 'sale',
             payment_method: paymentMethod,
+            payment_method2: paymentMethod2,
             customer_id: customerId,
-            cashier_name: document.getElementById('pos-cashier').value,
+            cashier_name: document.getElementById('pos-cashier').value || 'كاشير 1',
             total_amount: total,
             paid_amount: paid,
+            paid_amount2: paid2,
             items: this.cart.map(i => ({
                 product_id: i.id,
                 quantity: i.qty,
@@ -510,41 +814,216 @@ const app = {
             this.renderCart();
             this.loadProducts(); // Update stock
             this.loadCustomers(); // Update debt if any
+            
+            // Show the detailed receipt modal for viewing/printing
+            if (res.bill_id) {
+                this.showReceipt(res.bill_id);
+            }
         } else {
             alert(res.error);
         }
     },
 
+    getPaymentMethodInfo(method) {
+        switch (method) {
+            case 'cash':
+                return { name: 'كاش (نقدي)', badge: '<span class="badge bg-success">كاش</span>', badgeClass: 'badge bg-success' };
+            case 'card':
+                return { name: 'بطاقة (شبكة)', badge: '<span class="badge bg-primary">بطاقة</span>', badgeClass: 'badge bg-primary' };
+            case 'jeeb':
+                return { name: 'جيب', badge: '<span class="badge text-white" style="background-color: #0284c7;">جيب</span>', badgeClass: 'badge text-white bg-info' };
+            case 'onecash':
+                return { name: 'ون كاش', badge: '<span class="badge text-white" style="background-color: #d97706;">ون كاش</span>', badgeClass: 'badge text-white bg-warning' };
+            case 'haseb':
+                return { name: 'حاسب', badge: '<span class="badge text-white" style="background-color: #4b5563;">حاسب</span>', badgeClass: 'badge bg-secondary' };
+            case 'kuraimi':
+                return { name: 'كريمي', badge: '<span class="badge text-white" style="background-color: #0369a1;">كريمي</span>', badgeClass: 'badge text-white bg-primary' };
+            case 'floosak':
+                return { name: 'فلوسك', badge: '<span class="badge text-white" style="background-color: #7c3aed;">فلوسك</span>', badgeClass: 'badge text-white bg-purple' };
+            case 'deposit':
+                return { name: 'آجل (دين)', badge: '<span class="badge bg-danger">آجل (دين)</span>', badgeClass: 'badge bg-danger' };
+            default:
+                return { name: method || 'كاش', badge: `<span class="badge bg-secondary">${method || 'كاش'}</span>`, badgeClass: 'badge bg-secondary' };
+        }
+    },
+
+    // --- RECEIPT VIEW & PRINT ---
+    async showReceipt(billId) {
+        const res = await this.fetchAPI(`api/bills.php?id=${billId}`);
+        if (!res || !res.success || !res.bill) {
+            return alert(res.error || 'تعذر جلب تفاصيل الفاتورة');
+        }
+
+        const b = res.bill;
+        const items = res.items || [];
+
+        // Meta info
+        document.getElementById('rec-id').innerText = `#${b.id}`;
+        
+        // Exact Date and Time formatting
+        const rawDate = b.created_at || '';
+        let formattedDate = rawDate;
+        try {
+            const dt = new Date(rawDate.replace(' ', 'T'));
+            if (!isNaN(dt.getTime())) {
+                const datePart = dt.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                const timePart = dt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                formattedDate = `${datePart} - ${timePart}`;
+            }
+        } catch (e) {
+            formattedDate = rawDate;
+        }
+
+        document.getElementById('rec-datetime').innerText = formattedDate;
+        document.getElementById('rec-cashier').innerText = b.cashier_name || 'كاشير عام';
+        document.getElementById('rec-customer').innerText = b.customer_name ? `${b.customer_name} ${b.customer_phone ? ' ('+b.customer_phone+')' : ''}` : 'عميل عابر (نقدي)';
+
+        // Payment Method Badge & Info
+        const pmInfo1 = this.getPaymentMethodInfo(b.payment_method);
+        const badgeEl = document.getElementById('rec-payment-badge');
+        
+        const paidAmount1 = parseFloat(b.paid_amount) || 0;
+        const paidAmount2 = parseFloat(b.paid_amount2) || 0;
+        const isSplit = Boolean(b.payment_method2 && (paidAmount2 > 0 || b.payment_method2 === 'deposit'));
+
+        if (isSplit) {
+            const pmInfo2 = this.getPaymentMethodInfo(b.payment_method2);
+            badgeEl.className = 'd-inline-flex gap-1 align-items-center flex-wrap';
+            badgeEl.innerHTML = `${pmInfo1.badge} <span class="text-dark small">(${paidAmount1.toFixed(2)})</span> + ${pmInfo2.badge} <span class="text-dark small">(${paidAmount2.toFixed(2)})</span>`;
+        } else {
+            badgeEl.className = pmInfo1.badgeClass;
+            badgeEl.innerText = pmInfo1.name;
+        }
+
+        // Items table
+        const tbody = document.getElementById('rec-items-body');
+        tbody.innerHTML = '';
+        items.forEach(item => {
+            tbody.innerHTML += `
+                <tr>
+                    <td class="text-start">${item.product_name || 'صنف'} ${item.product_unit ? '('+item.product_unit+')' : ''}</td>
+                    <td>${item.quantity}</td>
+                    <td>${parseFloat(item.unit_price).toFixed(2)}</td>
+                    <td class="fw-bold">${parseFloat(item.total_price).toFixed(2)}</td>
+                </tr>
+            `;
+        });
+
+        // Totals: compute actual collected cash/electronic money vs debt (deposit)
+        const totalAmount = parseFloat(b.total_amount) || 0;
+        const collected1 = (b.payment_method !== 'deposit') ? paidAmount1 : 0;
+        const collected2 = (b.payment_method2 && b.payment_method2 !== 'deposit') ? paidAmount2 : 0;
+        const totalCollectedPaid = collected1 + collected2;
+        const debtAmount = Math.max(0, totalAmount - totalCollectedPaid);
+
+        document.getElementById('rec-total').innerText = totalAmount.toFixed(2) + ' ريال';
+        
+        if (isSplit) {
+            const pmInfo2 = this.getPaymentMethodInfo(b.payment_method2);
+            let paidBreakdown = [];
+            if (collected1 > 0) paidBreakdown.push(`${pmInfo1.name}: ${collected1.toFixed(2)}`);
+            if (collected2 > 0) paidBreakdown.push(`${pmInfo2.name}: ${collected2.toFixed(2)}`);
+            let breakdownHtml = paidBreakdown.length > 0 ? `<div class="small text-muted fw-normal">${paidBreakdown.join(' | ')}</div>` : '';
+            document.getElementById('rec-paid').innerHTML = `${totalCollectedPaid.toFixed(2)} ريال ${breakdownHtml}`;
+        } else {
+            document.getElementById('rec-paid').innerText = totalCollectedPaid.toFixed(2) + ' ريال';
+        }
+
+        const debtEl = document.getElementById('rec-debt');
+        debtEl.innerText = (debtAmount > 0 ? debtAmount.toFixed(2) : '0.00') + ' ريال';
+        if (debtAmount > 0) {
+            debtEl.className = 'text-danger fw-bold fs-6';
+        } else {
+            debtEl.className = 'text-muted fw-bold';
+        }
+
+        const modalEl = document.getElementById('receiptModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+    },
+
+    printReceipt() {
+        window.print();
+    },
+
     // --- REPORTS ---
     async loadReports() {
-        const date = document.getElementById('report-date').value;
-        const cashier = document.getElementById('report-cashier').value;
+        const dateInput = document.getElementById('report-date');
+        const date = dateInput ? dateInput.value : '';
+        const cashier = document.getElementById('report-cashier') ? encodeURIComponent(document.getElementById('report-cashier').value.trim()) : '';
+        const paymentMethod = document.getElementById('report-payment-method') ? document.getElementById('report-payment-method').value : 'all';
+        const sort = document.getElementById('report-sort') ? document.getElementById('report-sort').value : 'time_desc';
+
+        const labelEl = document.getElementById('report-filter-label');
+        if (labelEl) {
+            labelEl.innerText = date ? `المعروض: مبيعات يوم ${date}` : 'المعروض: جميع التواريخ';
+        }
+
+        const res = await this.fetchAPI(`api/reports.php?date=${date}&cashier=${cashier}&payment_method=${paymentMethod}&sort=${sort}`);
         
-        const res = await this.fetchAPI(`api/reports.php?date=${date}&cashier=${cashier}`);
-        
-        if(res.bills) {
-            document.getElementById('rep-total').innerText = res.totals.total_sales;
-            document.getElementById('rep-cash').innerText = res.totals.cash;
-            document.getElementById('rep-card').innerText = res.totals.card;
-            document.getElementById('rep-deposit').innerText = res.totals.deposit;
+        if(res && res.bills) {
+            document.getElementById('rep-total').innerText = parseFloat(res.totals.total_sales || 0).toFixed(2);
+            document.getElementById('rep-cash').innerText = parseFloat(res.totals.cash || 0).toFixed(2);
+            document.getElementById('rep-card').innerText = parseFloat(res.totals.card || 0).toFixed(2);
+            document.getElementById('rep-deposit').innerText = parseFloat(res.totals.deposit || 0).toFixed(2);
+            const countEl = document.getElementById('rep-count');
+            if (countEl) countEl.innerText = res.totals.count || res.bills.length;
             
             const tbody = document.getElementById('reports-table');
             tbody.innerHTML = '';
+
+            if (res.bills.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">لا توجد مبيعات مسجلة في هذا التاريخ أو حسب شروط البحث</td></tr>`;
+                return;
+            }
+
             res.bills.forEach(b => {
                 const isSale = b.type === 'sale';
+                const totalAmt = parseFloat(b.total_amount) || 0;
+                const paidAmt1 = (b.payment_method !== 'deposit') ? (parseFloat(b.paid_amount) || 0) : 0;
+                const paidAmt2 = (b.payment_method2 && b.payment_method2 !== 'deposit') ? (parseFloat(b.paid_amount2) || 0) : 0;
+                const totalPaid = paidAmt1 + paidAmt2;
+                const remaining = Math.max(0, totalAmt - totalPaid);
+
+                // Format exact date and time
+                let dateDisplay = b.created_at;
+                try {
+                    const dt = new Date(b.created_at.replace(' ', 'T'));
+                    if (!isNaN(dt.getTime())) {
+                        const dateOnly = b.created_at.split(' ')[0];
+                        const timeOnly = dt.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                        dateDisplay = `<div class="fw-bold">${dateOnly}</div><div class="small text-muted">${timeOnly}</div>`;
+                    }
+                } catch(e) {
+                    dateDisplay = b.created_at;
+                }
+
+                const pmInfo1 = this.getPaymentMethodInfo(b.payment_method);
+                let paymentDisplay = pmInfo1.badge;
+                
+                if (b.payment_method2 && (parseFloat(b.paid_amount2) > 0 || b.payment_method2 === 'deposit')) {
+                    const pmInfo2 = this.getPaymentMethodInfo(b.payment_method2);
+                    paymentDisplay = `<div class="d-flex flex-column gap-1 align-items-center">
+                        <div>${pmInfo1.badge} <span class="small fw-bold">${parseFloat(b.paid_amount || 0).toFixed(0)}</span></div>
+                        <div>${pmInfo2.badge} <span class="small fw-bold">${parseFloat(b.paid_amount2 || 0).toFixed(0)}</span></div>
+                    </div>`;
+                }
+
                 tbody.innerHTML += `
                     <tr class="${isSale ? '' : 'table-warning'}">
-                        <td>${b.id}</td>
-                        <td>${b.created_at.split(' ')[1]}</td>
-                        <td>${b.cashier_name}</td>
-                        <td>${b.customer_name || 'عام'}</td>
+                        <td class="fw-bold">#${b.id}</td>
+                        <td>${dateDisplay}</td>
+                        <td>${b.cashier_name || 'كاشير عام'}</td>
+                        <td>${b.customer_name || 'عميل عابر'}</td>
+                        <td>${paymentDisplay}</td>
+                        <td class="fw-bold">${totalAmt.toFixed(2)}</td>
+                        <td class="text-success fw-bold">${totalPaid.toFixed(2)}</td>
+                        <td>${remaining > 0 ? '<span class="badge bg-danger">'+remaining.toFixed(2)+'</span>' : '<span class="text-muted">0.00</span>'}</td>
                         <td>
-                            ${b.payment_method == 'cash' ? 'كاش' : ''}
-                            ${b.payment_method == 'card' ? 'بطاقة' : ''}
-                            ${b.payment_method == 'deposit' ? 'آجل' : ''}
+                            <button class="btn btn-sm btn-outline-primary" title="عرض وطباعة الإيصال" onclick="app.showReceipt(${b.id})">
+                                <i class="fas fa-file-invoice"></i> عرض الإيصال
+                            </button>
                         </td>
-                        <td>${b.total_amount}</td>
-                        <td>${b.paid_amount}</td>
                     </tr>
                 `;
             });
@@ -556,7 +1035,10 @@ document.addEventListener('DOMContentLoaded', () => {
     app.init();
     
     // Auto update paid amount when payment method changes
-    document.getElementById('pos-payment-method').addEventListener('change', (e) => {
-        app.renderCart(); 
-    });
+    const singlePm = document.getElementById('pos-payment-method');
+    if (singlePm) {
+        singlePm.addEventListener('change', () => {
+            app.renderCart(); 
+        });
+    }
 });

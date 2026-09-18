@@ -157,3 +157,33 @@ body {
 ::-webkit-scrollbar-thumb:hover {
     background: #a8a8a8; 
 }
+
+/* Receipt Styling */
+.receipt-box {
+    font-family: 'Cairo', monospace, sans-serif;
+    color: #222;
+}
+
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #receipt-print-area, #receipt-print-area * {
+        visibility: visible;
+    }
+    #receipt-print-area {
+        position: fixed;
+        left: 0;
+        top: 0;
+        width: 80mm !important;
+        max-width: 80mm !important;
+        margin: 0 auto;
+        padding: 10px !important;
+        border: none !important;
+        font-size: 12px;
+    }
+    .modal, .modal-backdrop {
+        position: static !important;
+        background: none !important;
+    }
+}
