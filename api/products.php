@@ -43,7 +43,41 @@ if ($method === 'GET') {
                     empty($data['stock_quantity']) ? 0 : $data['stock_quantity'],
                     empty($data['location']) ? '' : $data['location']
                 ]);
-                echo json_encode(['success' => true, 'id' => $pdo->lastInsertId()]);
+                
+                $newProductId = $pdo->lastInsertId();
+
+                // If purchase details are provided, record the initial purchase
+                if (isset($data['cost_price']) && is_numeric($data['cost_price'])) {
+                    $seller_id = empty($data['seller_id']) ? null : $data['seller_id'];
+                    $purchase_date = empty($data['purchase_date']) ? date('Y-m-d H:i:s') : $data['purchase_date'];
+                    $quantity = empty($data['stock_quantity']) ? 0 : $data['stock_quantity'];
+                    $paid_amount = empty($data['paid_amount']) ? 0 : (float)$data['paid_amount'];
+                    $note = empty($data['note']) ? null : $data['note'];
+                    
+                    if ($quantity > 0) {
+                        $purchaseStmt = $pdo->prepare("INSERT INTO product_purchases (product_id, seller_id, quantity, cost_price, paid_amount, note, purchase_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        $purchaseStmt->execute([
+                            $newProductId,
+                            $seller_id,
+                            $quantity,
+                            $data['cost_price'],
+                            $paid_amount,
+                            $note,
+                            $purchase_date
+                        ]);
+
+                        if ($seller_id) {
+                            $total_cost = (float)$quantity * (float)$data['cost_price'];
+                            $debt = $total_cost - $paid_amount;
+                            if ($debt > 0) {
+                                $debtStmt = $pdo->prepare("UPDATE sellers SET total_debt = total_debt + ? WHERE id = ?");
+                                $debtStmt->execute([$debt, $seller_id]);
+                            }
+                        }
+                    }
+                }
+
+                echo json_encode(['success' => true, 'id' => $newProductId]);
             } catch (PDOException $e) {
                 echo json_encode(['success' => false, 'error' => 'خطأ في قاعدة البيانات: ' . $e->getMessage()]);
             }

@@ -71,3 +71,37 @@ CREATE TABLE IF NOT EXISTS `payments` (
   FOREIGN KEY (`customer_id`) REFERENCES `customers`(`id`) ON DELETE CASCADE,
   FOREIGN KEY (`bill_id`) REFERENCES `bills`(`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `sellers` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `name` varchar(255) NOT NULL,
+  `phone` varchar(50) DEFAULT NULL,
+  `total_debt` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `product_purchases` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `product_id` int(11) NOT NULL,
+  `seller_id` int(11) DEFAULT NULL,
+  `quantity` decimal(10,2) NOT NULL,
+  `cost_price` decimal(10,2) NOT NULL,
+  `paid_amount` decimal(10,2) NOT NULL DEFAULT '0.00',
+  `note` text DEFAULT NULL,
+  `purchase_date` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`seller_id`) REFERENCES `sellers`(`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `seller_payments` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `seller_id` int(11) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `note` text DEFAULT NULL,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`seller_id`) REFERENCES `sellers`(`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

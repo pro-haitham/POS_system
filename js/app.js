@@ -3,17 +3,61 @@ const app = {
     products: [],
     categories: [],
     customers: [],
+    sellers: [],
 
     init() {
+        this.initTheme();
         this.setupNavigation();
         this.loadCategories();
         this.loadProducts();
         this.loadCustomers();
+        this.loadSellers();
         this.setupPOSSearch();
         this.setupInventorySearch();
         
         // Default dates for reports to today's local date
         this.setReportDateToday(false);
+    },
+
+    // --- THEME / DARK MODE ---
+    initTheme() {
+        const savedTheme = localStorage.getItem('pos_theme') || 'light';
+        this.applyTheme(savedTheme);
+    },
+
+    toggleTheme() {
+        const currentTheme = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+        const newTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+        this.applyTheme(newTheme);
+        localStorage.setItem('pos_theme', newTheme);
+        this.showToast(newTheme === 'dark' ? 'تم تفعيل الوضع الليلي 🌙' : 'تم تفعيل الوضع النهاري ☀️');
+    },
+
+    applyTheme(theme) {
+        const icon = document.getElementById('theme-toggle-icon');
+        const text = document.getElementById('theme-toggle-text');
+        
+        if (theme === 'dark') {
+            document.documentElement.setAttribute('data-bs-theme', 'dark');
+            document.documentElement.classList.add('dark-mode');
+            document.body.classList.add('dark-mode');
+            if (icon) {
+                icon.className = 'fas fa-sun text-warning';
+            }
+            if (text) {
+                text.innerText = 'الوضع النهاري';
+            }
+        } else {
+            document.documentElement.removeAttribute('data-bs-theme');
+            document.documentElement.classList.remove('dark-mode');
+            document.body.classList.remove('dark-mode');
+            if (icon) {
+                icon.className = 'fas fa-moon';
+            }
+            if (text) {
+                text.innerText = 'الوضع الليلي';
+            }
+        }
     },
 
     setReportDateToday(autoLoad = true) {
@@ -43,14 +87,23 @@ const app = {
                 if(e.currentTarget.dataset.target === 'pos-section') this.renderPOSProducts();
                 if(e.currentTarget.dataset.target === 'reports-section') this.loadReports();
                 if(e.currentTarget.dataset.target === 'inventory-section') this.renderInventoryTable();
+                if(e.currentTarget.dataset.target === 'seller-reports-section') this.loadSellerReports();
             });
         });
     },
 
     showToast(message) {
-        document.getElementById('toast-body-text').innerText = message;
-        const toast = new bootstrap.Toast(document.getElementById('liveToast'));
-        toast.show();
+        const textEl = document.getElementById('toast-body-text');
+        const toastEl = document.getElementById('liveToast');
+        if (textEl) textEl.innerText = message;
+        if (toastEl && window.bootstrap && typeof bootstrap.Toast === 'function') {
+            try {
+                const toast = bootstrap.Toast.getInstance(toastEl) || new bootstrap.Toast(toastEl);
+                toast.show();
+            } catch(e) {
+                console.warn('Toast display note:', e);
+            }
+        }
     },
 
     async fetchAPI(url, options = {}) {
@@ -128,9 +181,10 @@ const app = {
                     <td>${p.storage_location || '-'}</td>
                     <td><input type="number" step="any" class="form-control form-control-sm w-75" id="list_stock_${p.id}" value="${p.stock_quantity}" min="0"></td>
                     <td><input type="number" step="0.01" class="form-control form-control-sm w-75" id="list_price_${p.id}" value="${p.price}" min="0"></td>
-                    <td>
-                        <button class="btn btn-sm btn-primary" onclick="app.updateProductQuick(${p.id})">حفظ</button>
-                        <button class="btn btn-sm btn-danger" onclick="app.deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
+                    <td style="min-width: 140px;">
+                        <button class="btn btn-sm btn-success mb-1" title="توريد (إضافة مخزون)" onclick="app.openRestockModal(${p.id}, '${p.name.replace(/'/g, "\\'")}')"><i class="fas fa-truck-loading"></i> توريد</button>
+                        <button class="btn btn-sm btn-primary mb-1" onclick="app.updateProductQuick(${p.id})">حفظ</button>
+                        <button class="btn btn-sm btn-danger mb-1" onclick="app.deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
                     </td>
                 </tr>
             `;
@@ -151,6 +205,11 @@ const app = {
             price: document.getElementById('prod-price').value,
             stock_quantity: document.getElementById('prod-stock').value,
             location: document.getElementById('prod-location').value,
+            seller_id: document.getElementById('prod-seller') ? document.getElementById('prod-seller').value : '',
+            cost_price: document.getElementById('prod-cost-price') ? document.getElementById('prod-cost-price').value : '',
+            paid_amount: document.getElementById('prod-paid-amount') ? document.getElementById('prod-paid-amount').value : '',
+            note: document.getElementById('prod-purchase-note') ? document.getElementById('prod-purchase-note').value : '',
+            purchase_date: document.getElementById('prod-purchase-date') ? document.getElementById('prod-purchase-date').value : ''
         };
         
         if (!data.name || !data.price) return alert('الاسم والسعر مطلوبان');
@@ -223,6 +282,179 @@ const app = {
             this.loadProducts();
         } else {
             alert(res.error || 'حدث خطأ غير متوقع');
+        }
+    },
+
+    // --- SELLERS & RESTOCK ---
+    async loadSellers() {
+        this.sellers = await this.fetchAPI('api/sellers.php');
+        this.renderSellers();
+    },
+
+    renderSellers() {
+        const prodSelect = document.getElementById('prod-seller');
+        const restockSelect = document.getElementById('restock-seller');
+        const list = document.getElementById('sellers-list');
+        
+        let optionsHtml = '<option value="">بدون مورد</option>';
+        let listHtml = '';
+        
+        this.sellers.forEach(s => {
+            const debt = parseFloat(s.total_debt || 0);
+            const hasDebt = debt > 0;
+            
+            optionsHtml += `<option value="${s.id}">${s.name} ${s.phone ? '('+s.phone+')' : ''}</option>`;
+            
+            listHtml += `<div class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="fw-bold">${s.name}</div>
+                    <div class="small text-muted">${s.phone || 'بدون رقم'}</div>
+                    ${hasDebt ? `<div class="small text-danger fw-bold">الدين: ${debt.toFixed(2)} ريال</div>` : '<div class="small text-success">لا يوجد دين</div>'}
+                </div>
+                ${hasDebt ? `<button class="btn btn-sm btn-outline-danger" onclick="app.openPaySellerModal(${s.id}, '${s.name.replace(/'/g, "\\'")}', ${debt})"><i class="fas fa-money-bill-wave"></i> سداد</button>` : ''}
+            </div>`;
+        });
+        
+        if (prodSelect) prodSelect.innerHTML = optionsHtml;
+        if (restockSelect) restockSelect.innerHTML = optionsHtml;
+        if (list) list.innerHTML = listHtml;
+    },
+
+    async addSeller() {
+        const name = document.getElementById('new-seller-name').value;
+        const phone = document.getElementById('new-seller-phone').value;
+        if (!name) return alert('اسم المورد مطلوب');
+        
+        const res = await this.fetchAPI('api/sellers.php', {
+            method: 'POST',
+            body: JSON.stringify({ name, phone })
+        });
+        
+        if (res.success) {
+            this.showToast('تم إضافة المورد بنجاح');
+            document.getElementById('new-seller-name').value = '';
+            document.getElementById('new-seller-phone').value = '';
+            this.loadSellers();
+        } else {
+            alert(res.error);
+        }
+    },
+
+    openRestockModal(id, name) {
+        document.getElementById('restock-product-id').value = id;
+        document.getElementById('restock-product-name').value = name;
+        document.getElementById('restock-quantity').value = '';
+        document.getElementById('restock-cost').value = '';
+        document.getElementById('restock-paid-amount').value = '';
+        document.getElementById('restock-purchase-note').value = '';
+        document.getElementById('restock-total-cost').innerText = '0.00';
+        document.getElementById('restock-remaining-debt').innerText = '0.00';
+        
+        // Default to today's date
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        document.getElementById('restock-date').value = `${year}-${month}-${day}`;
+        
+        const modal = new bootstrap.Modal(document.getElementById('restockModal'));
+        modal.show();
+    },
+
+    async submitRestock() {
+        const productId = document.getElementById('restock-product-id').value;
+        const sellerId = document.getElementById('restock-seller').value;
+        const quantity = document.getElementById('restock-quantity').value;
+        const costPrice = document.getElementById('restock-cost').value;
+        const paidAmount = document.getElementById('restock-paid-amount').value;
+        const purchaseDate = document.getElementById('restock-date').value;
+        const note = document.getElementById('restock-purchase-note').value;
+        
+        if (!quantity || !costPrice) return alert('الكمية وسعر التكلفة مطلوبان');
+        
+        const res = await this.fetchAPI('api/purchases.php', {
+            method: 'POST',
+            body: JSON.stringify({
+                product_id: productId,
+                seller_id: sellerId,
+                quantity: parseFloat(quantity),
+                cost_price: parseFloat(costPrice),
+                paid_amount: parseFloat(paidAmount || 0),
+                note: note,
+                purchase_date: purchaseDate
+            })
+        });
+        
+        if (res.success) {
+            this.showToast('تم إضافة البضاعة وتحديث المخزون بنجاح');
+            const modalEl = document.getElementById('restockModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            this.loadProducts(); // Update stock everywhere
+        } else {
+            alert(res.error);
+        }
+    },
+
+    calcAddProductDebt() {
+        const qty = parseFloat(document.getElementById('prod-stock').value) || 0;
+        const cost = parseFloat(document.getElementById('prod-cost-price').value) || 0;
+        const paid = parseFloat(document.getElementById('prod-paid-amount').value) || 0;
+        
+        const total = qty * cost;
+        const debt = Math.max(0, total - paid);
+        
+        const totalEl = document.getElementById('prod-total-cost');
+        const debtEl = document.getElementById('prod-remaining-debt');
+        
+        if (totalEl) totalEl.innerText = total.toFixed(2);
+        if (debtEl) debtEl.innerText = debt.toFixed(2);
+    },
+
+    calcRestockDebt() {
+        const qty = parseFloat(document.getElementById('restock-quantity').value) || 0;
+        const cost = parseFloat(document.getElementById('restock-cost').value) || 0;
+        const paid = parseFloat(document.getElementById('restock-paid-amount').value) || 0;
+        
+        const total = qty * cost;
+        const debt = Math.max(0, total - paid);
+        
+        const totalEl = document.getElementById('restock-total-cost');
+        const debtEl = document.getElementById('restock-remaining-debt');
+        
+        if (totalEl) totalEl.innerText = total.toFixed(2);
+        if (debtEl) debtEl.innerText = debt.toFixed(2);
+    },
+
+    openPaySellerModal(id, name, debt) {
+        document.getElementById('pay-seller-id').value = id;
+        document.getElementById('pay-seller-name').value = name;
+        document.getElementById('pay-seller-debt').value = parseFloat(debt).toFixed(2);
+        document.getElementById('pay-seller-amount').value = '';
+        document.getElementById('pay-seller-note').value = '';
+        
+        const modal = new bootstrap.Modal(document.getElementById('paySellerModal'));
+        modal.show();
+    },
+
+    async submitSellerPayment() {
+        const id = document.getElementById('pay-seller-id').value;
+        const amount = document.getElementById('pay-seller-amount').value;
+        const note = document.getElementById('pay-seller-note').value;
+        
+        if (!amount || parseFloat(amount) <= 0) return alert('أدخل مبلغاً صحيحاً');
+        
+        const res = await this.fetchAPI('api/seller_payments.php', {
+            method: 'POST',
+            body: JSON.stringify({ seller_id: id, amount: parseFloat(amount), note })
+        });
+        
+        if (res.success) {
+            this.showToast('تم تسجيل سداد المورد بنجاح');
+            bootstrap.Modal.getInstance(document.getElementById('paySellerModal')).hide();
+            this.loadSellers(); // Refresh sellers list and debt
+        } else {
+            alert(res.error);
         }
     },
 
@@ -889,7 +1121,7 @@ const app = {
         if (isSplit) {
             const pmInfo2 = this.getPaymentMethodInfo(b.payment_method2);
             badgeEl.className = 'd-inline-flex gap-1 align-items-center flex-wrap';
-            badgeEl.innerHTML = `${pmInfo1.badge} <span class="text-dark small">(${paidAmount1.toFixed(2)})</span> + ${pmInfo2.badge} <span class="text-dark small">(${paidAmount2.toFixed(2)})</span>`;
+            badgeEl.innerHTML = `${pmInfo1.badge} <span class="small fw-semibold">(${paidAmount1.toFixed(2)})</span> + ${pmInfo2.badge} <span class="small fw-semibold">(${paidAmount2.toFixed(2)})</span>`;
         } else {
             badgeEl.className = pmInfo1.badgeClass;
             badgeEl.innerText = pmInfo1.name;
@@ -1028,10 +1260,172 @@ const app = {
                 `;
             });
         }
+    },
+
+    // --- SELLER REPORTS & EDITING ---
+    async loadSellerReports() {
+        const res = await this.fetchAPI('api/seller_reports.php');
+        if (!res || !res.success) return alert('خطأ في جلب تقارير الموردين');
+
+        // Render Totals
+        document.getElementById('sr-total-purchases').innerText = parseFloat(res.totals.total_purchases).toFixed(2);
+        document.getElementById('sr-total-payments').innerText = parseFloat(res.totals.total_payments).toFixed(2);
+        document.getElementById('sr-total-debt').innerText = parseFloat(res.totals.total_debt).toFixed(2);
+
+        // Render Purchases
+        const purchasesTbody = document.getElementById('sr-purchases-table');
+        purchasesTbody.innerHTML = '';
+        res.purchases.forEach(p => {
+            const total = parseFloat(p.quantity) * parseFloat(p.cost_price);
+            const debt = Math.max(0, total - parseFloat(p.paid_amount));
+            purchasesTbody.innerHTML += `
+                <tr>
+                    <td class="small" dir="ltr">${p.purchase_date}</td>
+                    <td class="fw-bold">${p.product_name}</td>
+                    <td>${p.seller_name || '-'}</td>
+                    <td>${p.quantity}</td>
+                    <td>${p.cost_price}</td>
+                    <td class="fw-bold">${total.toFixed(2)}</td>
+                    <td class="text-success">${p.paid_amount}</td>
+                    <td class="text-danger">${debt > 0 ? debt.toFixed(2) : '-'}</td>
+                    <td class="small text-muted">${p.note || ''}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="app.openEditPurchase(${p.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deletePurchase(${p.id})"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+        this._currentPurchases = res.purchases; // Cache for editing
+
+        // Render Payments
+        const paymentsTbody = document.getElementById('sr-payments-table');
+        paymentsTbody.innerHTML = '';
+        res.payments.forEach(p => {
+            paymentsTbody.innerHTML += `
+                <tr>
+                    <td class="small" dir="ltr">${p.created_at}</td>
+                    <td class="fw-bold">${p.seller_name}</td>
+                    <td class="text-success fw-bold">${p.amount}</td>
+                    <td class="small text-muted">${p.note || ''}</td>
+                    <td>
+                        <button class="btn btn-sm btn-success" onclick="app.openEditPayment(${p.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deletePayment(${p.id})"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
+        this._currentPayments = res.payments;
+    },
+
+    openEditPurchase(id) {
+        const p = this._currentPurchases.find(x => x.id == id);
+        if(!p) return;
+        
+        document.getElementById('edit-purchase-id').value = p.id;
+        document.getElementById('edit-purchase-qty').value = p.quantity;
+        document.getElementById('edit-purchase-cost').value = p.cost_price;
+        document.getElementById('edit-purchase-paid').value = p.paid_amount;
+        document.getElementById('edit-purchase-date').value = p.purchase_date;
+        document.getElementById('edit-purchase-note').value = p.note || '';
+
+        // Populate Products dropdown
+        const prodSel = document.getElementById('edit-purchase-product');
+        prodSel.innerHTML = this.products.map(pr => `<option value="${pr.id}" ${pr.id == p.product_id ? 'selected' : ''}>${pr.name}</option>`).join('');
+
+        // Populate Sellers dropdown
+        const selSel = document.getElementById('edit-purchase-seller');
+        selSel.innerHTML = '<option value="">بدون مورد</option>' + this.sellers.map(s => `<option value="${s.id}" ${s.id == p.seller_id ? 'selected' : ''}>${s.name}</option>`).join('');
+
+        new bootstrap.Modal(document.getElementById('editPurchaseModal')).show();
+    },
+
+    async submitEditPurchase() {
+        const data = {
+            id: document.getElementById('edit-purchase-id').value,
+            product_id: document.getElementById('edit-purchase-product').value,
+            seller_id: document.getElementById('edit-purchase-seller').value,
+            quantity: document.getElementById('edit-purchase-qty').value,
+            cost_price: document.getElementById('edit-purchase-cost').value,
+            paid_amount: document.getElementById('edit-purchase-paid').value,
+            purchase_date: document.getElementById('edit-purchase-date').value.replace('T', ' '),
+            note: document.getElementById('edit-purchase-note').value
+        };
+
+        const res = await this.fetchAPI('api/purchases.php', { method: 'PUT', body: JSON.stringify(data) });
+        if (res.success) {
+            this.showToast('تم تعديل عملية الشراء بنجاح');
+            bootstrap.Modal.getInstance(document.getElementById('editPurchaseModal')).hide();
+            this.loadSellerReports();
+            this.loadProducts(); // refresh stock
+            this.loadSellers(); // refresh debt
+        } else {
+            alert(res.error);
+        }
+    },
+
+    async deletePurchase(id) {
+        if(!confirm('تحذير: سيتم حذف العملية، وسيتم إرجاع كمية المخزون وديون المورد. هل أنت متأكد؟')) return;
+        const res = await this.fetchAPI('api/purchases.php', { method: 'DELETE', body: JSON.stringify({ id }) });
+        if (res.success) {
+            this.showToast('تم حذف عملية الشراء بنجاح');
+            this.loadSellerReports();
+            this.loadProducts();
+            this.loadSellers();
+        } else {
+            alert(res.error);
+        }
+    },
+
+    openEditPayment(id) {
+        const p = this._currentPayments.find(x => x.id == id);
+        if(!p) return;
+        
+        document.getElementById('edit-payment-id').value = p.id;
+        document.getElementById('edit-payment-amount').value = p.amount;
+        document.getElementById('edit-payment-note').value = p.note || '';
+
+        const selSel = document.getElementById('edit-payment-seller');
+        selSel.innerHTML = this.sellers.map(s => `<option value="${s.id}" ${s.id == p.seller_id ? 'selected' : ''}>${s.name}</option>`).join('');
+
+        new bootstrap.Modal(document.getElementById('editPaymentModal')).show();
+    },
+
+    async submitEditPayment() {
+        const data = {
+            id: document.getElementById('edit-payment-id').value,
+            seller_id: document.getElementById('edit-payment-seller').value,
+            amount: document.getElementById('edit-payment-amount').value,
+            note: document.getElementById('edit-payment-note').value
+        };
+
+        const res = await this.fetchAPI('api/seller_payments.php', { method: 'PUT', body: JSON.stringify(data) });
+        if (res.success) {
+            this.showToast('تم تعديل الدفعة بنجاح');
+            bootstrap.Modal.getInstance(document.getElementById('editPaymentModal')).hide();
+            this.loadSellerReports();
+            this.loadSellers();
+        } else {
+            alert(res.error);
+        }
+    },
+
+    async deletePayment(id) {
+        if(!confirm('تحذير: سيتم حذف الدفعة وإرجاعها كدين على المورد. هل أنت متأكد؟')) return;
+        const res = await this.fetchAPI('api/seller_payments.php', { method: 'DELETE', body: JSON.stringify({ id }) });
+        if (res.success) {
+            this.showToast('تم حذف الدفعة بنجاح');
+            this.loadSellerReports();
+            this.loadSellers();
+        } else {
+            alert(res.error);
+        }
     }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    window.app = app;
+    window.toggleTheme = () => app.toggleTheme();
     app.init();
     
     // Auto update paid amount when payment method changes
@@ -1042,3 +1436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// Also expose globally immediately
+window.app = app;
+window.toggleTheme = () => app.toggleTheme();

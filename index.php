@@ -8,7 +8,45 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <link href="css/style.css" rel="stylesheet">
+    <link href="css/style.css?v=<?= time() ?>" rel="stylesheet">
+    <script>
+        function applyInitialTheme() {
+            const savedTheme = localStorage.getItem('pos_theme') || 'light';
+            if (savedTheme === 'dark') {
+                document.documentElement.setAttribute('data-bs-theme', 'dark');
+                document.documentElement.classList.add('dark-mode');
+            } else {
+                document.documentElement.removeAttribute('data-bs-theme');
+                document.documentElement.classList.remove('dark-mode');
+            }
+        }
+        applyInitialTheme();
+
+        function toggleThemeMode() {
+            if (window.app && typeof window.app.toggleTheme === 'function') {
+                window.app.toggleTheme();
+            } else {
+                const currentTheme = document.documentElement.getAttribute('data-bs-theme') === 'dark' ? 'dark' : 'light';
+                const newTheme = (currentTheme === 'dark') ? 'light' : 'dark';
+                localStorage.setItem('pos_theme', newTheme);
+                const icon = document.getElementById('theme-toggle-icon');
+                const text = document.getElementById('theme-toggle-text');
+                if (newTheme === 'dark') {
+                    document.documentElement.setAttribute('data-bs-theme', 'dark');
+                    document.documentElement.classList.add('dark-mode');
+                    if (document.body) document.body.classList.add('dark-mode');
+                    if (icon) icon.className = 'fas fa-sun text-warning';
+                    if (text) text.innerText = 'الوضع النهاري';
+                } else {
+                    document.documentElement.removeAttribute('data-bs-theme');
+                    document.documentElement.classList.remove('dark-mode');
+                    if (document.body) document.body.classList.remove('dark-mode');
+                    if (icon) icon.className = 'fas fa-moon';
+                    if (text) text.innerText = 'الوضع الليلي';
+                }
+            }
+        }
+    </script>
 </head>
 <body>
 
@@ -22,9 +60,16 @@
             <li data-target="products-section"><i class="fas fa-box-open"></i> المنتجات والأقسام</li>
             <li data-target="inventory-section"><i class="fas fa-warehouse"></i> إدارة المخزون</li>
             <li data-target="customers-section"><i class="fas fa-users"></i> العملاء والديون</li>
-            <li data-target="reports-section"><i class="fas fa-chart-line"></i> التقارير والمبيعات</li>
+            <li data-target="seller-reports-section"><i class="fas fa-truck-loading"></i> الموردين والمشتريات</li>
+            <li data-target="reports-section"><i class="fas fa-chart-bar"></i> التقارير والمبيعات</li>
             <li><a href="api/backup.php" target="_blank" style="color: inherit; text-decoration: none;"><i class="fas fa-file-invoice text-success"></i> تصدير الإيصالات</a></li>
         </ul>
+        <div class="sidebar-footer p-3 mt-auto">
+            <button type="button" class="btn btn-dark-mode w-100 d-flex align-items-center justify-content-center gap-2 py-2" id="theme-toggle-btn" onclick="toggleThemeMode()">
+                <i class="fas fa-moon" id="theme-toggle-icon"></i>
+                <span id="theme-toggle-text">الوضع الليلي</span>
+            </button>
+        </div>
     </div>
 
     <!-- Main Content -->
@@ -163,7 +208,7 @@
                                         </div>
                                     </div>
                                     <div class="small text-muted text-center mt-1">
-                                        مجموع المدفوع: <span id="pos-split-total-paid" class="fw-bold text-dark">0.00</span> | المتبقي (دين): <span id="pos-split-remainder" class="fw-bold text-danger">0.00</span>
+                                        مجموع المدفوع: <span id="pos-split-total-paid" class="fw-bold">0.00</span> | المتبقي (دين): <span id="pos-split-remainder" class="fw-bold text-danger">0.00</span>
                                     </div>
                                 </div>
 
@@ -216,15 +261,53 @@
                                     <input type="text" id="prod-unit-other" class="form-control d-none" placeholder="اكتب الوحدة">
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="number" id="prod-price" class="form-control" placeholder="السعر" min="0" step="0.01">
+                                    <label class="small text-muted">سعر البيع:</label>
+                                    <input type="number" id="prod-price" class="form-control" placeholder="سعر البيع" min="0" step="0.01">
                                 </div>
                                 <div class="col-md-3">
-                                    <input type="text" id="prod-location" class="form-control" placeholder="مكان التخزين (الرف/المستودع)">
+                                    <label class="small text-muted">مكان التخزين:</label>
+                                    <input type="text" id="prod-location" class="form-control" placeholder="الرف/المستودع">
                                 </div>
                                 <div class="col-md-2">
-                                    <input type="number" id="prod-stock" class="form-control" placeholder="الكمية" min="0" step="any">
+                                    <label class="small text-muted">الكمية الافتتاحية:</label>
+                                    <input type="number" id="prod-stock" class="form-control" placeholder="الكمية" min="0" step="any" oninput="app.calcAddProductDebt()">
                                 </div>
+                                
+                                <!-- Purchase Details -->
                                 <div class="col-12 mt-3">
+                                    <h6 class="border-bottom pb-2 mb-2 text-primary"><i class="fas fa-truck-loading"></i> بيانات الشراء (اختياري)</h6>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted">المورد / البائع:</label>
+                                    <div class="d-flex gap-1">
+                                        <select id="prod-seller" class="form-select" onchange="app.calcAddProductDebt()"></select>
+                                        <button class="btn btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#sellersOffcanvas">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted">سعر التكلفة (الوحدة):</label>
+                                    <input type="number" id="prod-cost-price" class="form-control" placeholder="تكلفة الوحدة" min="0" step="0.01" oninput="app.calcAddProductDebt()">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted">المبلغ المدفوع:</label>
+                                    <input type="number" id="prod-paid-amount" class="form-control" placeholder="المدفوع للمورد" min="0" step="0.01" oninput="app.calcAddProductDebt()">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted">تاريخ الشراء:</label>
+                                    <input type="date" id="prod-purchase-date" class="form-control">
+                                </div>
+                                <div class="col-md-12 mt-2">
+                                    <label class="small text-muted">ملاحظة / بيان الشراء (اختياري):</label>
+                                    <input type="text" id="prod-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234، أو ملاحظات أخرى...">
+                                </div>
+                                <div class="col-12 mt-1 small">
+                                    <span class="text-muted">الإجمالي: <span id="prod-total-cost" class="fw-bold">0.00</span></span> | 
+                                    <span class="text-danger">الدين المتبقي: <span id="prod-remaining-debt" class="fw-bold">0.00</span></span>
+                                </div>
+
+                                <div class="col-12 mt-4">
                                     <button class="btn btn-success w-100" onclick="app.addProduct()">حفظ المنتج</button>
                                 </div>
                             </div>
@@ -458,6 +541,98 @@
             </div>
         </div>
 
+        <!-- SELLER REPORTS SECTION -->
+        <section id="seller-reports-section" class="section d-none">
+            <h2 class="mb-4 fw-bold"><i class="fas fa-truck-loading text-primary"></i> الموردين والمشتريات</h2>
+            
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card bg-primary text-white h-100 shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">إجمالي المشتريات</h5>
+                            <h2 class="fw-bold mb-0" id="sr-total-purchases">0.00</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white h-100 shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">إجمالي السداد</h5>
+                            <h2 class="fw-bold mb-0" id="sr-total-payments">0.00</h2>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-danger text-white h-100 shadow-sm border-0">
+                        <div class="card-body text-center">
+                            <h5 class="card-title">إجمالي الديون المتبقية</h5>
+                            <h2 class="fw-bold mb-0" id="sr-total-debt">0.00</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <ul class="nav nav-pills mb-3" id="sellerReportsTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="purchases-log-tab" data-bs-toggle="pill" data-bs-target="#purchases-log" type="button" role="tab"><i class="fas fa-shopping-cart"></i> سجل المشتريات</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="payments-log-tab" data-bs-toggle="pill" data-bs-target="#payments-log" type="button" role="tab"><i class="fas fa-money-bill-wave"></i> سجل السداد</button>
+                </li>
+            </ul>
+            <div class="tab-content" id="sellerReportsTabContent">
+                <!-- Purchases Log -->
+                <div class="tab-pane fade show active" id="purchases-log" role="tabpanel">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0 text-center">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>التاريخ</th>
+                                            <th>المنتج</th>
+                                            <th>المورد</th>
+                                            <th>الكمية</th>
+                                            <th>التكلفة (للوحدة)</th>
+                                            <th>الإجمالي</th>
+                                            <th>المدفوع</th>
+                                            <th>المديونية</th>
+                                            <th>ملاحظات</th>
+                                            <th>إجراءات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sr-purchases-table">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Payments Log -->
+                <div class="tab-pane fade" id="payments-log" role="tabpanel">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0 text-center">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>التاريخ</th>
+                                            <th>المورد</th>
+                                            <th>المبلغ المسدد</th>
+                                            <th>ملاحظات / بيان</th>
+                                            <th>إجراءات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="sr-payments-table">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
         <!-- Reports Section -->
         <section id="reports-section" class="section d-none">
             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -679,9 +854,206 @@
         </div>
     </div>
 
+    <!-- Restock Modal -->
+    <div class="modal fade" id="restockModal" tabindex="-1" aria-labelledby="restockModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="restockModalLabel"><i class="fas fa-box"></i> توريد بضاعة (إضافة مخزون)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="restock-product-id">
+                    <div class="mb-3">
+                        <label class="form-label">المنتج:</label>
+                        <input type="text" id="restock-product-name" class="form-control" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">المورد / البائع:</label>
+                        <select id="restock-seller" class="form-select"></select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">الكمية المشتراة:</label>
+                            <input type="number" id="restock-quantity" class="form-control" min="0.01" step="any" required oninput="app.calcRestockDebt()">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">سعر التكلفة للوحدة:</label>
+                            <input type="number" id="restock-cost" class="form-control" min="0" step="0.01" required oninput="app.calcRestockDebt()">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">المبلغ المدفوع للمورد:</label>
+                        <input type="number" id="restock-paid-amount" class="form-control" min="0" step="0.01" oninput="app.calcRestockDebt()">
+                    </div>
+                    <div class="mb-3 small bg-light p-2 rounded">
+                        <span class="text-muted">الإجمالي: <span id="restock-total-cost" class="fw-bold">0.00</span></span> | 
+                        <span class="text-danger">الدين المتبقي: <span id="restock-remaining-debt" class="fw-bold">0.00</span></span>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">تاريخ الشراء:</label>
+                        <input type="date" id="restock-date" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ملاحظة / بيان الفاتورة (اختياري):</label>
+                        <input type="text" id="restock-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-success" onclick="app.submitRestock()"><i class="fas fa-save"></i> حفظ التوريد</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sellers Management Offcanvas -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="sellersOffcanvas" aria-labelledby="sellersOffcanvasLabel">
+        <div class="offcanvas-header bg-light">
+            <h5 class="offcanvas-title" id="sellersOffcanvasLabel"><i class="fas fa-truck text-primary"></i> إدارة الموردين / البائعين</h5>
+            <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body">
+            <div class="card mb-4 border-0 shadow-sm">
+                <div class="card-header bg-white"><h6 class="mb-0">إضافة مورد جديد</h6></div>
+                <div class="card-body">
+                    <div class="mb-2">
+                        <label class="form-label small">اسم المورد:</label>
+                        <input type="text" id="new-seller-name" class="form-control form-control-sm" placeholder="الاسم أو الشركة">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small">رقم الهاتف:</label>
+                        <input type="text" id="new-seller-phone" class="form-control form-control-sm" placeholder="اختياري">
+                    </div>
+                    <button class="btn btn-primary btn-sm w-100 mt-2" onclick="app.addSeller()"><i class="fas fa-plus"></i> إضافة</button>
+                </div>
+            </div>
+            
+            <h6 class="border-bottom pb-2 mb-3">قائمة الموردين</h6>
+            <div class="list-group list-group-flush" id="sellers-list">
+                <!-- Sellers will be listed here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Pay Seller Debt Modal -->
+    <div class="modal fade" id="paySellerModal" tabindex="-1" aria-labelledby="paySellerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="paySellerModalLabel"><i class="fas fa-hand-holding-usd"></i> سداد دين مورد</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="pay-seller-id">
+                    <div class="mb-3">
+                        <label class="form-label">المورد / البائع:</label>
+                        <input type="text" id="pay-seller-name" class="form-control" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">إجمالي الدين الحالي:</label>
+                        <input type="text" id="pay-seller-debt" class="form-control fw-bold text-danger" readonly disabled>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">المبلغ المراد سداده:</label>
+                        <input type="number" id="pay-seller-amount" class="form-control" min="0.01" step="any" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ملاحظة / بيان (اختياري):</label>
+                        <input type="text" id="pay-seller-note" class="form-control" placeholder="مثال: دفعة من الحساب...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-danger" onclick="app.submitSellerPayment()"><i class="fas fa-check"></i> تسجيل السداد</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Purchase Modal -->
+    <div class="modal fade" id="editPurchaseModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="fas fa-edit"></i> تعديل عملية شراء / توريد</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-purchase-id">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">المنتج:</label>
+                            <select id="edit-purchase-product" class="form-select"></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">المورد:</label>
+                            <select id="edit-purchase-seller" class="form-select"></select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">الكمية:</label>
+                            <input type="number" id="edit-purchase-qty" class="form-control" min="0.01" step="any">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">سعر التكلفة:</label>
+                            <input type="number" id="edit-purchase-cost" class="form-control" min="0" step="0.01">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">المبلغ المدفوع:</label>
+                            <input type="number" id="edit-purchase-paid" class="form-control" min="0" step="0.01">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">التاريخ:</label>
+                            <input type="datetime-local" id="edit-purchase-date" class="form-control" step="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">ملاحظات:</label>
+                            <input type="text" id="edit-purchase-note" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-primary" onclick="app.submitEditPurchase()">حفظ التعديلات</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Payment Modal -->
+    <div class="modal fade" id="editPaymentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="fas fa-edit"></i> تعديل عملية سداد</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="edit-payment-id">
+                    <div class="mb-3">
+                        <label class="form-label">المورد:</label>
+                        <select id="edit-payment-seller" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">المبلغ:</label>
+                        <input type="number" id="edit-payment-amount" class="form-control" min="0.01" step="any">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">ملاحظات:</label>
+                        <input type="text" id="edit-payment-note" class="form-control">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-success" onclick="app.submitEditPayment()">حفظ التعديلات</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/app.js?v=<?= time() ?>"></script>
 </body>
 </html>
