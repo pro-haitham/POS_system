@@ -492,10 +492,13 @@ const app = {
                         </span>
                     </td>
                     <td>
-                        <div class="input-group input-group-sm w-75 mx-auto">
+                        <div class="input-group input-group-sm w-75 mx-auto mb-1">
                             <input type="number" class="form-control text-center" id="stock_${p.id}" value="${p.stock_quantity}" min="0" step="any">
                             <button class="btn btn-primary" onclick="app.updateStock(${p.id})">حفظ</button>
                         </div>
+                        <button class="btn btn-sm btn-outline-info w-75" onclick="app.showProductPurchases(${p.id})">
+                            <i class="fas fa-history"></i> سجل المشتريات
+                        </button>
                     </td>
                 </tr>
             `;
@@ -1359,6 +1362,13 @@ const app = {
             this.loadSellerReports();
             this.loadProducts(); // refresh stock
             this.loadSellers(); // refresh debt
+            this.renderInventoryTable();
+            
+            // If viewing specific product history, refresh it
+            const modalEl = document.getElementById('productPurchasesModal');
+            if (modalEl && modalEl.classList.contains('show')) {
+                this.showProductPurchases(data.product_id);
+            }
         } else {
             alert(res.error);
         }
@@ -1366,12 +1376,20 @@ const app = {
 
     async deletePurchase(id) {
         if(!confirm('تحذير: سيتم حذف العملية، وسيتم إرجاع كمية المخزون وديون المورد. هل أنت متأكد؟')) return;
+        const p = this._currentPurchases.find(x => x.id == id);
         const res = await this.fetchAPI('api/purchases.php', { method: 'DELETE', body: JSON.stringify({ id }) });
         if (res.success) {
             this.showToast('تم حذف عملية الشراء بنجاح');
             this.loadSellerReports();
             this.loadProducts();
             this.loadSellers();
+            this.renderInventoryTable();
+
+            // If viewing specific product history, refresh it
+            const modalEl = document.getElementById('productPurchasesModal');
+            if (modalEl && modalEl.classList.contains('show') && p) {
+                this.showProductPurchases(p.product_id);
+            }
         } else {
             alert(res.error);
         }
@@ -1420,6 +1438,60 @@ const app = {
         } else {
             alert(res.error);
         }
+    },
+
+    async showProductPurchases(productId) {
+        const product = this.products.find(p => p.id == productId);
+        if(!product) return;
+        
+        document.getElementById('pp-modal-title').innerText = product.name;
+        const tbody = document.getElementById('pp-table-body');
+        tbody.innerHTML = '<tr><td colspan="9">جاري التحميل...</td></tr>';
+        
+        new bootstrap.Modal(document.getElementById('productPurchasesModal')).show();
+
+        // Fetch reports if not loaded
+        let res = { success: true, purchases: this._currentPurchases };
+        if (!this._currentPurchases) {
+            res = await this.fetchAPI('api/seller_reports.php');
+            if (res && res.success) {
+                this._currentPurchases = res.purchases;
+            }
+        }
+        
+        if (!res || !res.success) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-danger">فشل تحميل السجل</td></tr>';
+            return;
+        }
+
+        const productPurchases = res.purchases.filter(p => p.product_id == productId);
+        tbody.innerHTML = '';
+        
+        if (productPurchases.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-muted">لا يوجد سجل مشتريات لهذا المنتج.</td></tr>';
+            return;
+        }
+
+        productPurchases.forEach(p => {
+            const total = parseFloat(p.quantity) * parseFloat(p.cost_price);
+            const debt = Math.max(0, total - parseFloat(p.paid_amount));
+            tbody.innerHTML += `
+                <tr>
+                    <td class="small" dir="ltr">${p.purchase_date}</td>
+                    <td>${p.seller_name || '-'}</td>
+                    <td>${p.quantity}</td>
+                    <td>${p.cost_price}</td>
+                    <td class="fw-bold">${total.toFixed(2)}</td>
+                    <td class="text-success">${p.paid_amount}</td>
+                    <td class="text-danger">${debt > 0 ? debt.toFixed(2) : '-'}</td>
+                    <td class="small text-muted">${p.note || ''}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="app.openEditPurchase(${p.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="app.deletePurchase(${p.id})"><i class="fas fa-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+        });
     }
 };
 
