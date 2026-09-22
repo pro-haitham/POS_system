@@ -33,7 +33,7 @@ if ($method === 'GET') {
     } else {
         if (!empty($data['name']) && is_numeric($data['price'])) {
             try {
-                $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location, bulk_unit_name, bulk_qty, bulk_barcode, bulk_price, is_liquid, ml_per_bottle, bottle_price, bottle_barcode, bottles_per_box, box_price_liquid, box_barcode_liquid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     empty($data['category_id']) ? null : $data['category_id'],
                     empty($data['serial_number']) ? '' : $data['serial_number'],
@@ -41,7 +41,18 @@ if ($method === 'GET') {
                     empty($data['unit']) ? 'قطعة' : $data['unit'],
                     $data['price'],
                     empty($data['stock_quantity']) ? 0 : $data['stock_quantity'],
-                    empty($data['location']) ? '' : $data['location']
+                    empty($data['location']) ? '' : $data['location'],
+                    empty($data['bulk_unit_name']) ? null : $data['bulk_unit_name'],
+                    empty($data['bulk_qty']) ? 0 : $data['bulk_qty'],
+                    empty($data['bulk_barcode']) ? null : $data['bulk_barcode'],
+                    empty($data['bulk_price']) ? null : $data['bulk_price'],
+                    empty($data['is_liquid']) ? 0 : $data['is_liquid'],
+                    empty($data['ml_per_bottle']) ? 0 : $data['ml_per_bottle'],
+                    empty($data['bottle_price']) ? null : $data['bottle_price'],
+                    empty($data['bottle_barcode']) ? null : $data['bottle_barcode'],
+                    empty($data['bottles_per_box']) ? 0 : $data['bottles_per_box'],
+                    empty($data['box_price_liquid']) ? null : $data['box_price_liquid'],
+                    empty($data['box_barcode_liquid']) ? null : $data['box_barcode_liquid']
                 ]);
                 
                 $newProductId = $pdo->lastInsertId();

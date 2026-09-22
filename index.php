@@ -273,6 +273,91 @@
                                     <input type="number" id="prod-stock" class="form-control" placeholder="الكمية" min="0" step="any" oninput="app.calcAddProductDebt()">
                                 </div>
                                 
+                                <!-- Bulk Packaging Details -->
+                                <div class="col-12 mt-3">
+                                    <div class="card bg-light border-0 shadow-sm" style="background-color: var(--bs-tertiary-bg) !important;">
+                                        <div class="card-header p-2 bg-transparent border-bottom-0">
+                                            <a class="text-decoration-none text-body d-block fw-bold" data-bs-toggle="collapse" href="#bulk-packaging-section">
+                                                <i class="fas fa-boxes text-warning"></i> إضافة تعبئة كبرى (اختياري)
+                                            </a>
+                                        </div>
+                                        <div class="collapse" id="bulk-packaging-section">
+                                            <div class="card-body p-2 pt-0">
+                                                <div class="row g-2 align-items-end">
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">اسم التعبئة الكبرى:</label>
+                                                        <select id="prod-bulk-name" class="form-select">
+                                                            <option value="">بدون تعبئة كبرى</option>
+                                                            <option value="كرتونة">كرتونة</option>
+                                                            <option value="علبة">علبة</option>
+                                                            <option value="درزن">درزن</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">عدد القطع بداخلها:</label>
+                                                        <input type="number" id="prod-bulk-qty" class="form-control" placeholder="مثال: 24" min="0">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">باركود التعبئة الكبرى:</label>
+                                                        <input type="text" id="prod-bulk-barcode" class="form-control" placeholder="اختياري">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">سعر بيع التعبئة الكبرى:</label>
+                                                        <input type="number" id="prod-bulk-price" class="form-control" placeholder="السعر" min="0" step="0.01">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Liquid/Volume Tracking -->
+                                <div class="col-12 mt-3">
+                                    <div class="card bg-light border-0 shadow-sm" style="background-color: var(--bs-tertiary-bg) !important;">
+                                        <div class="card-header p-2 bg-transparent border-bottom-0">
+                                            <a class="text-decoration-none text-body d-block fw-bold" data-bs-toggle="collapse" href="#liquid-tracking-section" id="liquid-toggle-btn">
+                                                <i class="fas fa-flask text-info"></i> إضافة منتج سائل (سوائل، عطور)
+                                            </a>
+                                        </div>
+                                        <div class="collapse" id="liquid-tracking-section">
+                                            <div class="card-body p-2 pt-0 border-top mt-2 border-info">
+                                                <div class="row g-2 align-items-end">
+                                                    <input type="hidden" id="prod-is-liquid" value="0">
+                                                    <div class="col-md-2">
+                                                        <label class="small text-muted">سعة العبوة (مل):</label>
+                                                        <input type="number" id="prod-liquid-ml" class="form-control border-info" placeholder="مثال: 60" min="0">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="small text-muted">سعر العبوة كاملة:</label>
+                                                        <input type="number" id="prod-liquid-bottle-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">باركود العبوة:</label>
+                                                        <input type="text" id="prod-liquid-bottle-barcode" class="form-control border-info" placeholder="اختياري">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="small text-muted">سعر بيع 1 ملي:</label>
+                                                        <input type="number" id="prod-liquid-ml-price" class="form-control border-info" placeholder="سعر الملي" min="0" step="0.01">
+                                                    </div>
+                                                </div>
+                                                <div class="row g-2 align-items-end mt-2">
+                                                    <div class="col-md-2">
+                                                        <label class="small text-muted">عبوات في الكرتون:</label>
+                                                        <input type="number" id="prod-liquid-box-qty" class="form-control border-info" placeholder="العدد" min="0">
+                                                    </div>
+                                                    <div class="col-md-2">
+                                                        <label class="small text-muted">سعر الكرتون:</label>
+                                                        <input type="number" id="prod-liquid-box-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01">
+                                                    </div>
+                                                    <div class="col-md-3">
+                                                        <label class="small text-muted">باركود الكرتون:</label>
+                                                        <input type="text" id="prod-liquid-box-barcode" class="form-control border-info" placeholder="اختياري">
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
                                 <!-- Purchase Details -->
                                 <div class="col-12 mt-3">
                                     <h6 class="border-bottom pb-2 mb-2 text-primary"><i class="fas fa-truck-loading"></i> بيانات الشراء (اختياري)</h6>
@@ -341,6 +426,19 @@
         <!-- Inventory Section -->
         <section id="inventory-section" class="section d-none">
             <h2 class="mb-4">إدارة المخزون (Storage & CRM)</h2>
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <div class="card text-white bg-info shadow-sm h-100" style="background-color: var(--bs-info) !important;">
+                        <div class="card-body d-flex align-items-center">
+                            <i class="fas fa-tint fa-3x me-3"></i>
+                            <div>
+                                <h5 class="card-title mb-1 text-white">إجمالي السائل المتوفر (مل)</h5>
+                                <h3 class="mb-0 fw-bold text-white" id="total-liquid-ml">0</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="card">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">قائمة المخزون الحالي</h5>

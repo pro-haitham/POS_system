@@ -80,7 +80,8 @@ if ($method === 'GET') {
             $stmtItem->execute([$billId, $item['product_id'], $item['quantity'], $item['unit_price'], $item['total_price']]);
             
             // Adjust stock: decrease if sale, increase if purchase
-            $stockChange = ($type === 'sale') ? -$item['quantity'] : $item['quantity'];
+            $unitMultiplier = isset($item['unit_multiplier']) ? (float)$item['unit_multiplier'] : 1;
+            $stockChange = ($type === 'sale') ? -($item['quantity'] * $unitMultiplier) : ($item['quantity'] * $unitMultiplier);
             $stmtStock->execute([$stockChange, $item['product_id']]);
 
             // Get product name for debt details

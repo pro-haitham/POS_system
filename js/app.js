@@ -109,6 +109,11 @@ const app = {
     async fetchAPI(url, options = {}) {
         try {
             const res = await fetch(url, options);
+            if (!res.ok) {
+                const text = await res.text();
+                console.error(`HTTP Error ${res.status} when fetching ${url}:`, text);
+                return { success: false, error: `HTTP ${res.status} Error` };
+            }
             return await res.json();
         } catch (e) {
             console.error('API Error:', e);
@@ -163,9 +168,65 @@ const app = {
     // --- PRODUCTS ---
     async loadProducts() {
         this.products = await this.fetchAPI('api/products.php');
+        this.buildPOSProducts();
         this.renderProductsTable();
         this.renderPOSProducts();
         this.renderInventoryTable();
+    },
+
+    buildPOSProducts() {
+        this.posProducts = [];
+        this.products.forEach(p => {
+            // Base unit
+            this.posProducts.push({
+                ...p,
+                pos_id: p.id + '_base',
+                display_name: p.name,
+                sell_price: parseFloat(p.price),
+                sell_unit: p.unit,
+                sell_barcode: p.serial_number,
+                sell_qty_multiplier: 1
+            });
+            // Bulk unit
+            if (p.bulk_unit_name && parseFloat(p.bulk_qty) > 0) {
+                this.posProducts.push({
+                    ...p,
+                    pos_id: p.id + '_bulk',
+                    display_name: p.name + ' (' + p.bulk_unit_name + ')',
+                    sell_price: parseFloat(p.bulk_price) || (parseFloat(p.price) * parseFloat(p.bulk_qty)),
+                    sell_unit: p.bulk_unit_name,
+                    sell_barcode: p.bulk_barcode,
+                    sell_qty_multiplier: parseFloat(p.bulk_qty)
+                });
+            }
+            // Liquid units
+            if (p.is_liquid == 1) {
+                // Bottle
+                if (parseFloat(p.ml_per_bottle) > 0) {
+                    this.posProducts.push({
+                        ...p,
+                        pos_id: p.id + '_bottle',
+                        display_name: p.name + ' (عبوة)',
+                        sell_price: parseFloat(p.bottle_price) || (parseFloat(p.price) * parseFloat(p.ml_per_bottle)),
+                        sell_unit: 'عبوة',
+                        sell_barcode: p.bottle_barcode,
+                        sell_qty_multiplier: parseFloat(p.ml_per_bottle)
+                    });
+                }
+                // Box
+                if (parseFloat(p.bottles_per_box) > 0 && parseFloat(p.ml_per_bottle) > 0) {
+                    this.posProducts.push({
+                        ...p,
+                        pos_id: p.id + '_liquidbox',
+                        display_name: p.name + ' (كرتون)',
+                        sell_price: parseFloat(p.box_price_liquid) || ((parseFloat(p.bottle_price) || (parseFloat(p.price) * parseFloat(p.ml_per_bottle))) * parseFloat(p.bottles_per_box)),
+                        sell_unit: 'كرتون',
+                        sell_barcode: p.box_barcode_liquid,
+                        sell_qty_multiplier: parseFloat(p.ml_per_bottle) * parseFloat(p.bottles_per_box)
+                    });
+                }
+            }
+        });
     },
 
     renderProductsTable() {
@@ -192,6 +253,12 @@ const app = {
     },
 
     async addProduct() {
+        let isLiquid = 0;
+        let liquidSection = document.getElementById('liquid-tracking-section');
+        if (liquidSection && liquidSection.classList.contains('show')) {
+            isLiquid = 1;
+        }
+
         let unitVal = document.getElementById('prod-unit-select').value;
         if (unitVal === 'other') {
             unitVal = document.getElementById('prod-unit-other').value || 'قطعة';
@@ -201,16 +268,31 @@ const app = {
             name: document.getElementById('prod-name').value,
             serial_number: document.getElementById('prod-serial').value,
             category_id: document.getElementById('prod-category').value,
-            unit: unitVal,
-            price: document.getElementById('prod-price').value,
+            unit: isLiquid ? 'مل' : unitVal,
+            price: isLiquid ? document.getElementById('prod-liquid-ml-price').value : document.getElementById('prod-price').value,
             stock_quantity: document.getElementById('prod-stock').value,
             location: document.getElementById('prod-location').value,
             seller_id: document.getElementById('prod-seller') ? document.getElementById('prod-seller').value : '',
             cost_price: document.getElementById('prod-cost-price') ? document.getElementById('prod-cost-price').value : '',
             paid_amount: document.getElementById('prod-paid-amount') ? document.getElementById('prod-paid-amount').value : '',
             note: document.getElementById('prod-purchase-note') ? document.getElementById('prod-purchase-note').value : '',
-            purchase_date: document.getElementById('prod-purchase-date') ? document.getElementById('prod-purchase-date').value : ''
+            purchase_date: document.getElementById('prod-purchase-date') ? document.getElementById('prod-purchase-date').value : '',
+            bulk_unit_name: document.getElementById('prod-bulk-name') ? document.getElementById('prod-bulk-name').value : '',
+            bulk_qty: document.getElementById('prod-bulk-qty') ? document.getElementById('prod-bulk-qty').value : '',
+            bulk_barcode: document.getElementById('prod-bulk-barcode') ? document.getElementById('prod-bulk-barcode').value : '',
+            bulk_price: document.getElementById('prod-bulk-price') ? document.getElementById('prod-bulk-price').value : '',
+            is_liquid: isLiquid,
+            ml_per_bottle: document.getElementById('prod-liquid-ml') ? document.getElementById('prod-liquid-ml').value : '',
+            bottle_price: document.getElementById('prod-liquid-bottle-price') ? document.getElementById('prod-liquid-bottle-price').value : '',
+            bottle_barcode: document.getElementById('prod-liquid-bottle-barcode') ? document.getElementById('prod-liquid-bottle-barcode').value : '',
+            bottles_per_box: document.getElementById('prod-liquid-box-qty') ? document.getElementById('prod-liquid-box-qty').value : '',
+            box_price_liquid: document.getElementById('prod-liquid-box-price') ? document.getElementById('prod-liquid-box-price').value : '',
+            box_barcode_liquid: document.getElementById('prod-liquid-box-barcode') ? document.getElementById('prod-liquid-box-barcode').value : ''
         };
+        
+        if (isLiquid) {
+            data.stock_quantity = (parseFloat(data.stock_quantity) || 0) * (parseFloat(data.ml_per_bottle) || 1);
+        }
         
         if (!data.name || !data.price) return alert('الاسم والسعر مطلوبان');
         if (parseFloat(data.price) < 0) return alert('لا يمكن أن يكون السعر بالسالب');
@@ -226,6 +308,19 @@ const app = {
             document.querySelectorAll('#products-section input').forEach(i => i.value = '');
             document.getElementById('prod-unit-select').value = 'قطعة';
             document.getElementById('prod-unit-other').classList.add('d-none');
+            if (document.getElementById('prod-bulk-name')) document.getElementById('prod-bulk-name').value = '';
+            if (document.getElementById('prod-bulk-qty')) document.getElementById('prod-bulk-qty').value = '';
+            if (document.getElementById('prod-bulk-barcode')) document.getElementById('prod-bulk-barcode').value = '';
+            if (document.getElementById('prod-bulk-price')) document.getElementById('prod-bulk-price').value = '';
+            
+            if (document.getElementById('prod-liquid-ml')) document.getElementById('prod-liquid-ml').value = '';
+            if (document.getElementById('prod-liquid-bottle-price')) document.getElementById('prod-liquid-bottle-price').value = '';
+            if (document.getElementById('prod-liquid-bottle-barcode')) document.getElementById('prod-liquid-bottle-barcode').value = '';
+            if (document.getElementById('prod-liquid-ml-price')) document.getElementById('prod-liquid-ml-price').value = '';
+            if (document.getElementById('prod-liquid-box-qty')) document.getElementById('prod-liquid-box-qty').value = '';
+            if (document.getElementById('prod-liquid-box-price')) document.getElementById('prod-liquid-box-price').value = '';
+            if (document.getElementById('prod-liquid-box-barcode')) document.getElementById('prod-liquid-box-barcode').value = '';
+
             this.loadProducts();
         } else alert(res.error);
     },
@@ -472,6 +567,17 @@ const app = {
         
         tbody.innerHTML = '';
         
+        let totalLiquidML = 0;
+        this.products.forEach(p => {
+            if (p.is_liquid == 1) {
+                totalLiquidML += parseFloat(p.stock_quantity) || 0;
+            } else if (p.unit === 'مل' || p.unit === 'ml' || p.unit === 'ML') {
+                totalLiquidML += parseFloat(p.stock_quantity) || 0;
+            }
+        });
+        const totalLiquidEl = document.getElementById('total-liquid-ml');
+        if (totalLiquidEl) totalLiquidEl.innerText = totalLiquidML.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+        
         const filtered = this.products.filter(p => 
             p.name.toLowerCase().includes(searchTerm) || 
             (p.serial_number && p.serial_number.includes(searchTerm))
@@ -479,6 +585,22 @@ const app = {
 
         filtered.forEach(p => {
             const isLowStock = p.stock_quantity <= 5;
+            
+            let stockDisplay = p.stock_quantity;
+            if (p.is_liquid == 1 && parseFloat(p.ml_per_bottle) > 0) {
+                const totalMl = parseFloat(p.stock_quantity) || 0;
+                const capacity = parseFloat(p.ml_per_bottle);
+                const bottles = Math.floor(totalMl / capacity);
+                const loose = totalMl % capacity;
+                if (loose > 0) {
+                    stockDisplay = `${bottles} علبة و ${loose.toFixed(1)} مل<br><small>(${totalMl} مل)</small>`;
+                } else {
+                    stockDisplay = `${bottles} علبة<br><small>(${totalMl} مل)</small>`;
+                }
+            } else if (p.is_liquid == 1) {
+                stockDisplay = `${p.stock_quantity} مل`;
+            }
+            
             tbody.innerHTML += `
                 <tr class="${isLowStock ? 'table-danger' : ''}">
                     <td>${p.serial_number || '-'}</td>
@@ -487,8 +609,8 @@ const app = {
                     <td>${p.unit}</td>
                     <td><input type="text" class="form-control form-control-sm text-center" id="inv_loc_${p.id}" value="${p.storage_location || ''}" placeholder="مكان التخزين"></td>
                     <td>
-                        <span class="badge ${isLowStock ? 'bg-danger' : 'bg-success'} fs-6">
-                            ${p.stock_quantity}
+                        <span class="badge ${isLowStock ? 'bg-danger' : 'bg-success'} fs-6" style="line-height: 1.5;">
+                            ${stockDisplay}
                         </span>
                     </td>
                     <td>
@@ -824,19 +946,19 @@ const app = {
         const grid = document.getElementById('pos-products-grid');
         grid.innerHTML = '';
         
-        const filtered = this.products.filter(p => 
-            p.name.toLowerCase().includes(searchTerm) || 
-            (p.serial_number && p.serial_number.includes(searchTerm))
+        const filtered = this.posProducts.filter(p => 
+            p.display_name.toLowerCase().includes(searchTerm) || 
+            (p.sell_barcode && p.sell_barcode.includes(searchTerm))
         );
 
         filtered.forEach(p => {
             grid.innerHTML += `
                 <div class="col">
-                    <div class="card product-card h-100" onclick="app.addToCart(${p.id})">
+                    <div class="card product-card h-100" onclick="app.addToCart('${p.pos_id}')">
                         <div class="card-body d-flex flex-column justify-content-center">
-                            <div class="product-title">${p.name}</div>
-                            <div class="product-unit">${p.unit}</div>
-                            <div class="product-price">${p.price}</div>
+                            <div class="product-title">${p.display_name}</div>
+                            <div class="product-unit">${p.sell_unit}</div>
+                            <div class="product-price">${p.sell_price.toFixed(2)}</div>
                         </div>
                     </div>
                 </div>
@@ -844,15 +966,16 @@ const app = {
         });
     },
 
-    addToCart(productId) {
-        const product = this.products.find(p => p.id == productId);
+    addToCart(posId) {
+        const product = this.posProducts.find(p => p.pos_id == posId);
         if (!product) return;
 
         const stock = parseFloat(product.stock_quantity) || 0;
-        const existing = this.cart.find(i => i.id == productId);
+        const existing = this.cart.find(i => i.pos_id == posId);
         const currentQty = existing ? existing.qty : 0;
+        const multiplier = product.sell_qty_multiplier;
         
-        if (currentQty + 1 > stock) {
+        if ((currentQty + 1) * multiplier > stock) {
             return alert(`عذراً، الكمية المتوفرة في المخزون لا تكفي! المتاح: ${stock}`);
         }
 
@@ -861,25 +984,28 @@ const app = {
         } else {
             this.cart.push({
                 id: product.id,
-                name: product.name,
-                unit: product.unit,
-                price: parseFloat(product.price),
-                qty: 1
+                pos_id: product.pos_id,
+                name: product.display_name,
+                unit: product.sell_unit,
+                price: parseFloat(product.sell_price),
+                qty: 1,
+                unit_multiplier: multiplier
             });
         }
         this.renderCart();
     },
 
-    updateCartItem(id, field, value) {
-        const item = this.cart.find(i => i.id == id);
+    updateCartItem(posId, field, value) {
+        const item = this.cart.find(i => i.pos_id == posId);
         if(item) {
             if (field === 'qty') {
-                const product = this.products.find(p => p.id == id);
+                const product = this.posProducts.find(p => p.pos_id == posId);
                 const stock = parseFloat(product.stock_quantity) || 0;
                 let newQty = parseFloat(value) || 0;
-                if (newQty > stock) {
-                    alert(`عذراً، الكمية المتوفرة في المخزون هي ${stock} فقط`);
-                    newQty = stock;
+                if (newQty * item.unit_multiplier > stock) {
+                    const maxAllowed = Math.floor(stock / item.unit_multiplier);
+                    alert(`عذراً، الكمية المتوفرة في المخزون تكفي لـ ${maxAllowed} ${item.unit} فقط`);
+                    newQty = maxAllowed;
                 }
                 item.qty = newQty;
             } else {
@@ -889,8 +1015,8 @@ const app = {
         }
     },
 
-    removeFromCart(id) {
-        this.cart = this.cart.filter(i => i.id != id);
+    removeFromCart(posId) {
+        this.cart = this.cart.filter(i => i.pos_id != posId);
         this.renderCart();
     },
 
@@ -963,10 +1089,10 @@ const app = {
             total += itemTotal;
             tbody.innerHTML += `
                 <tr>
-                    <td class="text-start" style="font-size: 13px;">${item.name} (${item.unit})</td>
-                    <td><input type="number" step="any" class="form-control qty-input d-inline-block" value="${item.qty}" onchange="app.updateCartItem(${item.id}, 'qty', this.value)"></td>
-                    <td><input type="number" step="0.01" class="form-control price-input d-inline-block" value="${item.price}" onchange="app.updateCartItem(${item.id}, 'price', this.value)"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="app.removeFromCart(${item.id})"><i class="fas fa-times"></i></button></td>
+                    <td class="text-start" style="font-size: 13px;">${item.name}</td>
+                    <td><input type="number" step="any" class="form-control qty-input d-inline-block" value="${item.qty}" onchange="app.updateCartItem('${item.pos_id}', 'qty', this.value)"></td>
+                    <td><input type="number" step="0.01" class="form-control price-input d-inline-block" value="${item.price}" onchange="app.updateCartItem('${item.pos_id}', 'price', this.value)"></td>
+                    <td><button class="btn btn-sm btn-danger" onclick="app.removeFromCart('${item.pos_id}')"><i class="fas fa-times"></i></button></td>
                 </tr>
             `;
         });
@@ -1038,7 +1164,8 @@ const app = {
                 product_id: i.id,
                 quantity: i.qty,
                 unit_price: i.price,
-                total_price: i.price * i.qty
+                total_price: i.price * i.qty,
+                unit_multiplier: i.unit_multiplier
             }))
         };
 
