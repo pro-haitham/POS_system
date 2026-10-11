@@ -292,6 +292,17 @@ const app = {
         
         if (isLiquid) {
             data.stock_quantity = (parseFloat(data.stock_quantity) || 0) * (parseFloat(data.ml_per_bottle) || 1);
+
+            // Price per ML is optional: derive it from the bottle price and capacity when left blank
+            if (!data.price) {
+                const bottlePrice = parseFloat(data.bottle_price);
+                const mlPerBottle = parseFloat(data.ml_per_bottle);
+                if (bottlePrice > 0 && mlPerBottle > 0) {
+                    data.price = (bottlePrice / mlPerBottle).toFixed(4);
+                } else if (data.name) {
+                    return alert('للمنتج السائل: أدخل سعر الزجاجة وسعتها (مل) أو سعر المل');
+                }
+            }
         }
         
         if (!data.name || !data.price) return alert('الاسم والسعر مطلوبان');
@@ -331,10 +342,9 @@ const app = {
         
         if (parseFloat(price) < 0 || parseFloat(stock) < 0) return alert('القيم لا يمكن أن تكون بالسالب');
 
-        const res1 = await this.fetchAPI('api/products.php', { method: 'POST', body: JSON.stringify({ action: 'update_price', id, price }) });
-        const res2 = await this.fetchAPI('api/products.php', { method: 'POST', body: JSON.stringify({ action: 'update_stock', id, stock }) });
+        const res = await this.fetchAPI('api/products.php', { method: 'POST', body: JSON.stringify({ action: 'update_price_stock', id, price, stock }) });
         
-        if(res1.success && res2.success) {
+        if(res.success) {
             this.showToast('تم تحديث البيانات بنجاح');
             this.loadProducts();
             
@@ -343,7 +353,7 @@ const app = {
             });
             this.renderCart();
         } else {
-            alert(res1.error || res2.error || 'حدث خطأ أثناء التحديث');
+            alert(res.error || 'حدث خطأ أثناء التحديث');
         }
     },
 
@@ -915,7 +925,12 @@ const app = {
             
             // Auto select new customer
             if (res.id) {
-                $('#pos-customer').val(res.id).trigger('change');
+                if (window.jQuery) {
+                    $('#pos-customer').val(res.id).trigger('change');
+                } else {
+                    const sel = document.getElementById('pos-customer');
+                    if (sel) { sel.value = res.id; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+                }
             }
         } else alert(res.error);
     },
@@ -1001,15 +1016,30 @@ const app = {
             if (field === 'qty') {
                 const product = this.posProducts.find(p => p.pos_id == posId);
                 const stock = parseFloat(product.stock_quantity) || 0;
-                let newQty = parseFloat(value) || 0;
+                let newQty = parseFloat(value);
+                if (!isFinite(newQty) || newQty <= 0) {
+                    // Zero, negative or non-numeric quantity: drop the line instead of keeping an invalid one
+                    if (isFinite(newQty) && newQty < 0) alert('لا يمكن أن تكون الكمية بالسالب');
+                    this.removeFromCart(posId);
+                    return;
+                }
                 if (newQty * item.unit_multiplier > stock) {
                     const maxAllowed = Math.floor(stock / item.unit_multiplier);
                     alert(`عذراً، الكمية المتوفرة في المخزون تكفي لـ ${maxAllowed} ${item.unit} فقط`);
                     newQty = maxAllowed;
+                    if (newQty <= 0) {
+                        this.removeFromCart(posId);
+                        return;
+                    }
                 }
                 item.qty = newQty;
             } else {
-                item[field] = parseFloat(value) || 0;
+                const newPrice = parseFloat(value);
+                if (!isFinite(newPrice) || newPrice < 0) {
+                    alert('لا يمكن أن يكون السعر بالسالب');
+                } else {
+                    item[field] = newPrice;
+                }
             }
             this.renderCart();
         }

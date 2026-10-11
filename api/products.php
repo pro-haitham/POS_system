@@ -20,6 +20,26 @@ if ($method === 'GET') {
         $stmt = $pdo->prepare("UPDATE products SET price = ? WHERE id = ?");
         $stmt->execute([$data['price'], $data['id']]);
         echo json_encode(['success' => true]);
+    } elseif (isset($data['action']) && $data['action'] === 'update_price_stock') {
+        // Atomic: update price and stock together in a single transaction
+        if (empty($data['id']) || !isset($data['price'], $data['stock'])
+            || !is_numeric($data['price']) || !is_numeric($data['stock'])
+            || (float)$data['price'] < 0 || (float)$data['stock'] < 0) {
+            echo json_encode(['success' => false, 'error' => 'قيم السعر أو المخزون غير صالحة']);
+            exit;
+        }
+        try {
+            $pdo->beginTransaction();
+            $stmt = $pdo->prepare("UPDATE products SET price = ?, stock_quantity = ? WHERE id = ?");
+            $stmt->execute([$data['price'], $data['stock'], $data['id']]);
+            $pdo->commit();
+            echo json_encode(['success' => true]);
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            echo json_encode(['success' => false, 'error' => 'خطأ أثناء التحديث: ' . $e->getMessage()]);
+        }
     } elseif (isset($data['action']) && $data['action'] === 'update_stock') {
         // Updating stock and location
         if (isset($data['location'])) {
@@ -36,7 +56,7 @@ if ($method === 'GET') {
                 $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location, bulk_unit_name, bulk_qty, bulk_barcode, bulk_price, is_liquid, ml_per_bottle, bottle_price, bottle_barcode, bottles_per_box, box_price_liquid, box_barcode_liquid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     empty($data['category_id']) ? null : $data['category_id'],
-                    empty($data['serial_number']) ? '' : $data['serial_number'],
+                    (isset($data['serial_number']) && trim((string)$data['serial_number']) !== '') ? trim((string)$data['serial_number']) : null,
                     $data['name'],
                     empty($data['unit']) ? 'قطعة' : $data['unit'],
                     $data['price'],

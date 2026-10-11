@@ -55,6 +55,16 @@ if ($method === 'GET') {
     $paidAmount2 = (float)($data['paid_amount2'] ?? 0);
     $items = $data['items'];
 
+    // Reject invalid lines (zero/negative quantity or negative prices)
+    foreach ($items as $it) {
+        if (!isset($it['quantity']) || !is_numeric($it['quantity']) || (float)$it['quantity'] <= 0
+            || !isset($it['unit_price']) || !is_numeric($it['unit_price']) || (float)$it['unit_price'] < 0
+            || !isset($it['total_price']) || !is_numeric($it['total_price']) || (float)$it['total_price'] < 0) {
+            echo json_encode(['success' => false, 'error' => 'الفاتورة تحتوي على كمية أو سعر غير صالح']);
+            exit;
+        }
+    }
+
     // Compute actual collected cash/electronic payment (excluding deposit/debt)
     $collectedPaid1 = ($paymentMethod !== 'deposit') ? $paidAmount : 0;
     $collectedPaid2 = ($paymentMethod2 && $paymentMethod2 !== 'deposit') ? $paidAmount2 : 0;

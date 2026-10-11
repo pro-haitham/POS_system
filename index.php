@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام إدارة المبيعات (POS)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <link href="vendor/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="vendor/fontawesome/css/all.min.css" rel="stylesheet">
+    <link href="vendor/cairo/cairo.css" rel="stylesheet">
+    <link href="vendor/select2.min.css" rel="stylesheet" />
     <link href="css/style.css?v=<?= time() ?>" rel="stylesheet">
     <script>
         function applyInitialTheme() {
@@ -74,6 +74,9 @@
 
     <!-- Main Content -->
     <div class="main-content" id="main-content">
+        <!-- Sync Status -->
+        <div id="sync-status-badge" class="position-absolute" style="top: 15px; left: 15px; z-index: 1060;"></div>
+        
         <!-- Toast Notification -->
         <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050">
             <div id="liveToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
@@ -467,9 +470,6 @@
         <section id="customers-section" class="section d-none">
             <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h2 class="mb-0">العملاء وإدارة الديون</h2>
-                <a href="api/backup.php" target="_blank" class="btn btn-outline-success">
-                    <i class="fas fa-file-invoice"></i> تصدير الإيصالات
-                </a>
             </div>
 
             <!-- Customer Debt Summary Cards -->
@@ -1188,9 +1188,10 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="vendor/bootstrap.bundle.min.js"></script>
+    <script src="vendor/jquery.min.js"></script>
+    <script src="vendor/select2.min.js"></script>
     <script src="js/app.js?v=<?= time() ?>"></script>
+    <script src="js/auto_sync.js?v=<?= time() ?>"></script>
 </body>
 </html>

@@ -45,7 +45,10 @@ try {
     } catch (\PDOException $ignored) {}
     // Ensure default walk-in customer exists
     try {
-        $pdo->exec("INSERT INTO `customers` (`id`, `name`, `phone`, `total_debt`) VALUES (1, 'عميل عابر (نقدي)', '', 0.00) ON DUPLICATE KEY UPDATE `name` = IF(`name`='عميل عام', 'عميل عابر (نقدي)', `name`)");
+        $stmtCheck = $pdo->query("SELECT id FROM `customers` WHERE `id` = 1");
+        if (!$stmtCheck->fetch()) {
+            $pdo->exec("INSERT INTO `customers` (`id`, `name`, `phone`, `total_debt`) VALUES (1, 'عميل عابر (نقدي)', '', 0.00)");
+        }
     } catch (\PDOException $ignored) {
     }
 } catch (\PDOException $e) {
