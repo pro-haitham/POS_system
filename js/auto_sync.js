@@ -77,3 +77,12 @@ class AutoSync {
 document.addEventListener('DOMContentLoaded', () => {
     window.autoSync = new AutoSync();
 });
+
+// Trigger automatic backup check on load (after 10 seconds) and every 30 minutes when online
+setTimeout(() => {
+    if (navigator.onLine) fetch('api/auto_backup.php').catch(() => {});
+}, 10000);
+
+setInterval(() => {
+    if (navigator.onLine) fetch('api/auto_backup.php').catch(() => {});
+}, 30 * 60 * 1000);
