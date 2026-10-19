@@ -429,19 +429,8 @@
         <!-- Inventory Section -->
         <section id="inventory-section" class="section d-none">
             <h2 class="mb-4">إدارة المخزون (Storage & CRM)</h2>
-            <div class="row mb-3">
-                <div class="col-md-4">
-                    <div class="card text-white bg-info shadow-sm h-100" style="background-color: var(--bs-info) !important;">
-                        <div class="card-body d-flex align-items-center">
-                            <i class="fas fa-tint fa-3x me-3"></i>
-                            <div>
-                                <h5 class="card-title mb-1 text-white">إجمالي السائل المتوفر (مل)</h5>
-                                <h3 class="mb-0 fw-bold text-white" id="total-liquid-ml">0</h3>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Per-product liquid counters (rendered by app.loadLiquidSummary) -->
+            <div class="row g-3 mb-3" id="liquid-summary-cards"></div>
             <div class="card">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">قائمة المخزون الحالي</h5>

@@ -5,6 +5,31 @@ header('Content-Type: application/json; charset=utf-8');
 $method = $_SERVER['REQUEST_METHOD'];
 
 if ($method === 'GET') {
+    // Per-product liquid summary for the Inventory page cards.
+    // NOTE: for liquid products, stock_quantity is stored in ML (sales deduct
+    // quantity * unit_multiplier, where a bottle's multiplier = ml_per_bottle),
+    // so total ML = stock_quantity; ml_per_bottle is used to derive bottle counts.
+    if (($_GET['action'] ?? '') === 'liquid_summary') {
+        $stmt = $pdo->query("SELECT id, name, stock_quantity, ml_per_bottle FROM products WHERE is_liquid = 1 ORDER BY name ASC");
+        $summary = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $totalMl  = max(0, (float)$row['stock_quantity']);
+            $capacity = (float)$row['ml_per_bottle'];
+            $bottles  = $capacity > 0 ? (int)floor($totalMl / $capacity) : null;
+            $looseMl  = $capacity > 0 ? round($totalMl - ($bottles * $capacity), 2) : null;
+            $summary[] = [
+                'id'            => (int)$row['id'],
+                'name'          => $row['name'],
+                'total_ml'      => round($totalMl, 2),
+                'ml_per_bottle' => $capacity,
+                'bottles'       => $bottles,
+                'loose_ml'      => $looseMl,
+            ];
+        }
+        echo json_encode($summary);
+        exit;
+    }
+
     $search = $_GET['search'] ?? '';
     if ($search) {
         $stmt = $pdo->prepare("SELECT p.*, c.name as category_name FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.name LIKE ? OR p.serial_number LIKE ? ORDER BY p.id DESC");

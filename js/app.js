@@ -86,7 +86,10 @@ const app = {
                 // Trigger refresh if needed
                 if(e.currentTarget.dataset.target === 'pos-section') this.renderPOSProducts();
                 if(e.currentTarget.dataset.target === 'reports-section') this.loadReports();
-                if(e.currentTarget.dataset.target === 'inventory-section') this.renderInventoryTable();
+                if(e.currentTarget.dataset.target === 'inventory-section') {
+                    this.renderInventoryTable();
+                    this.loadLiquidSummary();
+                }
                 if(e.currentTarget.dataset.target === 'seller-reports-section') this.loadSellerReports();
             });
         });
@@ -172,6 +175,7 @@ const app = {
         this.renderProductsTable();
         this.renderPOSProducts();
         this.renderInventoryTable();
+        this.loadLiquidSummary();
     },
 
     buildPOSProducts() {
@@ -564,6 +568,51 @@ const app = {
     },
 
     // --- INVENTORY / STORAGE ---
+    // Renders one cyan counter card per liquid product (is_liquid = 1)
+    async loadLiquidSummary() {
+        const container = document.getElementById('liquid-summary-cards');
+        if (!container) return;
+
+        const data = await this.fetchAPI('api/products.php?action=liquid_summary');
+        if (!Array.isArray(data)) {
+            container.innerHTML = '';
+            return;
+        }
+
+        if (data.length === 0) {
+            container.innerHTML = `
+                <div class="col-12">
+                    <div class="alert alert-info mb-0"><i class="fas fa-tint me-2"></i>لا توجد منتجات سائلة مسجلة.</div>
+                </div>`;
+            return;
+        }
+
+        const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const fmt = (n) => Number(n || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
+
+        container.innerHTML = data.map(item => {
+            let bottleInfo = '';
+            if (item.bottles !== null && item.ml_per_bottle > 0) {
+                bottleInfo = `${item.bottles} علبة` + (item.loose_ml > 0 ? ` و ${fmt(item.loose_ml)} مل` : '');
+            }
+            return `
+                <div class="col-xl-3 col-lg-4 col-md-6 col-12">
+                    <div class="card text-white bg-info shadow-sm h-100" style="background-color: var(--bs-info) !important;">
+                        <div class="card-body">
+                            <h6 class="card-title fw-bold text-white text-truncate mb-2" title="${esc(item.name)}">${esc(item.name)}</h6>
+                            <div class="d-flex align-items-center">
+                                <i class="fas fa-tint fa-2x me-3"></i>
+                                <div>
+                                    <h3 class="mb-0 fw-bold text-white">${fmt(item.total_ml)} <small class="fs-6">مل</small></h3>
+                                    ${bottleInfo ? `<small class="text-white-50">${bottleInfo}</small>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+    },
+
     setupInventorySearch() {
         document.getElementById('inventory-search').addEventListener('input', (e) => {
             const term = e.target.value.toLowerCase();
@@ -576,17 +625,6 @@ const app = {
         if (!tbody) return;
         
         tbody.innerHTML = '';
-        
-        let totalLiquidML = 0;
-        this.products.forEach(p => {
-            if (p.is_liquid == 1) {
-                totalLiquidML += parseFloat(p.stock_quantity) || 0;
-            } else if (p.unit === 'مل' || p.unit === 'ml' || p.unit === 'ML') {
-                totalLiquidML += parseFloat(p.stock_quantity) || 0;
-            }
-        });
-        const totalLiquidEl = document.getElementById('total-liquid-ml');
-        if (totalLiquidEl) totalLiquidEl.innerText = totalLiquidML.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2});
         
         const filtered = this.products.filter(p => 
             p.name.toLowerCase().includes(searchTerm) || 
