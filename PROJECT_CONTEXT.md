@@ -1,276 +1,455 @@
-# PROJECT_CONTEXT.md — Offline-First PHP/MySQL POS System
+﻿# PROJECT_CONTEXT.md — POS System: Complete Architectural Context
 
-> **Purpose of this file:** Handoff context for an AI coding assistant.
-> **Generated:** 2026-10-15, from direct inspection of the codebase and the live `pos_system` database. Where this file and older docs (`SESSION_REPORT.md`, `walkthrough.md`) disagree, **this file reflects the actual code**.
-> **Project root:** `c:\xampp\htdocs\POS_system-main` (served at `http://localhost/POS_system-main/`)
-
----
-
-## 0. TL;DR for the AI
-
-- Single-page Arabic (RTL) POS. `index.php` is the shell, `js/app.js` is the app logic (one `app` object), and `api/*.php` are JSON endpoints using PDO.
-- Runtime: **XAMPP on Windows**: PHP **8.2.12**, MariaDB **10.4.32**. DB `pos_system`, user `root`, empty password (`api/db.php`).
-- All frontend assets are served from `vendor/`. **There are no CDN references** in `index.php`.
-- Sync: every synced table has `uuid` / `is_synced` / `last_synced_at` columns and 2 triggers (20 triggers total). `js/auto_sync.js` calls `api/sync_to_cloud.php` every 30 s, which POSTs dirty rows to a receiver. The receiver is currently the **local mock** (`cloud_mock/receive_sync.php` → DB `pos_cloud_mock`).
-- **`database.sql` is stale**: it is missing ~20 columns that the live DB and the code depend on. Use the live schema in §3, not `database.sql`.
-- **Read §7 (Known Gaps) before you change anything.**
-- **DB state:** factory-reset on 2026-10-11. Every table is empty except `customers` id=1 (walk-in customer).
+> **Purpose of this file:** Hand-off document for AI assistants continuing development on this system.
+> Every section is written to be maximally useful inside an AI context window.
+> Last updated: 2026-10-19 | Environment: XAMPP on Windows, PHP 8.2, MariaDB 10.x
 
 ---
 
 ## 1. Project Overview
 
-This is an offline-first point-of-sale system for a small retail shop (Yemeni market: currency/payment wallets such as Jeeb, OneCash, Kuraimi, Floosak). It covers:
+A **fully offline-first, single-page PHP/MySQL Point of Sale (POS) system** designed for a small retail shop. The system runs entirely on a local XAMPP server (no internet required for daily operations) and serves as the authoritative data source.
 
-- **POS checkout** with barcode/serial lookup and split payments (two payment methods per bill). Unpaid remainders are recorded as customer debt (`deposit` = آجل).
-- **Multi-unit products**: piece, carton, box, dozen, custom bulk unit, and **liquid products** sold by bottle, box, or ml.
-- **Inventory / Storage & CRM**: stock and location edits, purchase history per product, and a total-liquid-ml widget.
-- **Customers & debts**: a running `total_debt` per customer plus a ledger in `payments` (`type` = `debt` | `payment`).
-- **Sellers (suppliers)**: stock purchases (`product_purchases`), seller debt, and seller payments.
-- **Reports** and an **Excel export** of receipts/sales/debts/inventory.
-- **Cloud sync** of all tables to a remote DB for mobile viewing, built so local operation never depends on it.
-
-All business logic runs locally. If the internet drops, the shop keeps selling and sync resumes later.
+**Key characteristics:**
+- Single-file SPA frontend: all UI lives in `index.php`, driven by a monolithic vanilla JS object (`app` in `js/app.js`)
+- REST-style PHP API endpoints in `api/` directory — each file handles one resource
+- Arabic RTL interface (`dir="rtl"`) using Bootstrap RTL
+- **Offline-first guarantee:** all JS/CSS dependencies are vendored locally — zero CDN calls
+- Optional cloud sync: unsent rows are pushed to a configurable cloud endpoint when the browser detects connectivity
+- Automated SQL backups to local disk + optional Telegram delivery
 
 ---
 
 ## 2. Tech Stack & Asset Management
 
 ### Backend
-| Item | Detail |
+| Layer | Technology |
 |---|---|
-| Language | PHP 8.2.12 (XAMPP), procedural, no framework, no Composer |
-| DB | MariaDB 10.4.32, InnoDB, `utf8mb4_unicode_ci` |
-| DB access | PDO, `ERRMODE_EXCEPTION`, `FETCH_ASSOC`, `EMULATE_PREPARES=false` (in `api/db.php`) |
-| API style | One file per resource; branches on `$_SERVER['REQUEST_METHOD']`; JSON body via `php://input`; responds `{"success":bool,...}` |
-| Auth | **None.** No login or sessions, so the app trusts the LAN (see §7) |
+| Runtime | PHP 8.2 (XAMPP) |
+| Database | MariaDB 10.x — database name: `pos_system` |
+| DB Access | PDO with `PDO::ERRMODE_EXCEPTION`, `FETCH_ASSOC`, emulated prepares OFF |
+| Server | Apache 2.4 (XAMPP) on Windows |
+| DB Tools | `mysqldump.exe` (XAMPP bundled) for backup |
+| HTTP Client | PHP `curl` — used for cloud sync and Telegram API |
 
 ### Frontend
-| Library | Version (from file headers) | Local path |
+| Library | Version | Local Path |
 |---|---|---|
-| Bootstrap (RTL CSS + bundle JS) | 5.3.0 | `vendor/bootstrap.rtl.min.css`, `vendor/bootstrap.bundle.min.js` |
-| jQuery | 3.6.0 | `vendor/jquery.min.js` |
-| Select2 | 4.1.0 | `vendor/select2.min.css`, `vendor/select2.min.js` |
-| Font Awesome | 6.0.0 | `vendor/fontawesome/css/all.min.css` + `vendor/fontawesome/webfonts/*.woff2|ttf` (solid, regular, brands, v4compat) |
-| Cairo font | Google Fonts, self-hosted | `vendor/cairo/cairo.css` + 3 `.woff2` subsets (Arabic, Latin, Latin-ext) |
-| App code | vanilla JS (an `app` object) | `js/app.js` (~80 KB), `js/auto_sync.js`, `css/style.css` |
+| Bootstrap 5 RTL | 5.x | `vendor/bootstrap.rtl.min.css` + `vendor/bootstrap.bundle.min.js` |
+| jQuery | 3.x | `vendor/jquery.min.js` |
+| Select2 | 4.x | `vendor/select2.min.js` + `vendor/select2.min.css` |
+| Font Awesome | 6.x | `vendor/fontawesome/` (local webfont + CSS) |
+| Cairo Font | — | `vendor/cairo/` (Arabic Google Font, self-hosted) |
 
-### Offline asset rule (STRICT)
-**Every frontend dependency is hosted locally in `vendor/`, so the app works 100% offline.** Verified: `index.php` has no `http(s)://` asset URLs. Load order (index.php L7–11, L1191–1195):
-```html
-<link href="vendor/bootstrap.rtl.min.css"> <link href="vendor/fontawesome/css/all.min.css">
-<link href="vendor/cairo/cairo.css"> <link href="vendor/select2.min.css"> <link href="css/style.css?v=<?= time() ?>">
-...
-<script src="vendor/bootstrap.bundle.min.js"></script> <script src="vendor/jquery.min.js"></script>
-<script src="vendor/select2.min.js"></script> <script src="js/app.js?v=..."></script> <script src="js/auto_sync.js?v=..."></script>
-```
-- **Never add CDN links.** Download any new library into `vendor/` and reference it relatively.
-- `?v=<?= time() ?>` disables caching for app files on every load. This is intentional during development.
+> **CRITICAL — Offline Guarantee:** Every single frontend dependency is served from the local `vendor/` directory.
+> There are **zero external CDN references** in `index.php`. Adding any `https://cdn.jsdelivr.net/` or similar URL will break offline operation.
+> When adding new UI libraries, they MUST be downloaded and placed in `vendor/` first.
+
+### Application JS files
+| File | Role |
+|---|---|
+| `js/app.js` | Monolithic application object (~1,800 lines). All UI logic, API calls, state. |
+| `js/auto_sync.js` | Background cloud sync poller + backup trigger. Loaded after `app.js`. |
 
 ---
 
 ## 3. Database Schema & Sync Architecture
 
-### 3.1 Live schema (`pos_system`)
-Every table below also has the three sync columns described in §3.2.
+### 3.1 The Sync Column Pattern (Applies to ALL tables)
 
-**categories**: `id` PK, `name` varchar(100)
+Every syncable table carries **three extra columns** added via `migrate_sync.php`:
 
-**products**
-- `id` PK, `category_id` FK→categories, `serial_number` varchar(100) **UNIQUE NULL** (empty strings are normalized to NULL on insert), `name`, `unit` (default 'قطعة'), `price` dec(10,2), `stock_quantity` dec(10,2), `storage_location`
-- Carton / box / dozen units: `carton_qty`, `carton_price`, `carton_barcode`, `box_qty`, `box_price`, `box_barcode`, `dozen_price`, `dozen_barcode`
-- Custom bulk unit: `bulk_unit_name`, `bulk_qty`, `bulk_barcode`, `bulk_price`
-- Liquids: `is_liquid` tinyint, `ml_per_bottle`, `bottle_price`, `bottle_barcode`, `bottles_per_box`, `box_price_liquid`, `box_barcode_liquid`
-- For liquids, `stock_quantity` is stored in the base unit. The UI shows `N علبة (X مل)`. Total ml = bottles × `ml_per_bottle` + loose ml.
-
-**customers**: `id` PK, `name` varchar(150), `phone`, `total_debt` dec. **Row id=1 = 'عميل عابر (نقدي)' (walk-in) MUST exist.** Bills default to `customer_id=1`. `api/db.php` inserts this row if it is missing, but only via SELECT-then-INSERT so it never fires an UPDATE trigger.
-
-**bills**: `id` PK, `type` enum('sale','purchase'), `payment_method` varchar(50) default 'cash', `payment_method2` NULL, `customer_id` FK→customers, `cashier_name`, `total_amount`, `paid_amount`, `paid_amount2`, `debt_amount` (legacy, not written by bills.php), `created_at` timestamp.
-Payment method keys: `cash, card, jeeb, onecash, haseb, kuraimi, floosak, deposit` (deposit = on credit).
-
-**bill_items**: `id` PK, `bill_id` FK→bills, `product_id` FK→products, `quantity`, `unit_price`, `total_price`
-
-**payments** (customer ledger): `id`, `customer_id` FK, `amount`, `type` enum('payment','debt'), `note`, `bill_id`, `items_details` text, `created_at`
-
-**debt_payments** (legacy): `id`, `customer_id` FK, `amount_paid`, `payment_date`
-
-**sellers**: `id`, `name`, `phone`, `total_debt`, `created_at`
-
-**product_purchases**: `id`, `product_id`, `seller_id`, `quantity`, `cost_price`, `paid_amount`, `note`, `purchase_date`. **No FK constraints in the live DB.**
-
-**seller_payments**: `id`, `seller_id`, `amount`, `payment_date`, `note`, `created_at`. **No FK constraints in the live DB.**
-
-**Live FKs (only these 6):** bills.customer_id→customers, bill_items.bill_id→bills, bill_items.product_id→products, debt_payments.customer_id→customers, payments.customer_id→customers, products.category_id→categories.
-
-**Runtime self-migrations:** `api/db.php` runs `ALTER TABLE ... ADD COLUMN` statements wrapped in try/catch on **every request**. They add `storage_location`, `payment_method2`, `paid_amount2`, and the payments `type`/`bill_id`/`items_details` columns. These are idempotent but add overhead.
-
-### 3.2 Sync columns (on all 10 tables)
-| Column | Type | Role |
-|---|---|---|
-| `uuid` | VARCHAR(36) UNIQUE | Global identity; the cloud upserts are keyed on it |
-| `is_synced` | TINYINT(1) DEFAULT 0 | 0 = dirty (needs push), 1 = pushed |
-| `last_synced_at` | DATETIME NULL | Time of the last successful push |
-
-These were added by `migrate_sync.php`, which is idempotent. Run it again after recreating the DB from `database.sql`.
-
-### 3.3 Triggers (20 = 10 tables × 2)
 ```sql
--- {table}_before_insert
-BEFORE INSERT FOR EACH ROW BEGIN IF NEW.uuid IS NULL THEN SET NEW.uuid = UUID(); END IF; END
--- {table}_before_update
-BEFORE UPDATE FOR EACH ROW BEGIN IF NEW.is_synced = OLD.is_synced THEN SET NEW.is_synced = 0; END IF; END
+uuid          VARCHAR(36) UNIQUE  -- globally unique ID, set by BEFORE INSERT trigger
+is_synced     TINYINT(1) DEFAULT 0 -- 0 = dirty/unsynced, 1 = confirmed synced to cloud
+last_synced_at DATETIME DEFAULT NULL -- timestamp of last successful cloud sync
 ```
-- New rows start dirty (column default 0) and get a UUID (MariaDB `UUID()` = v1).
-- **Any** UPDATE that leaves `is_synced` unchanged marks the row dirty, including no-op updates such as `SET price = price`.
-- The sync worker escapes this rule by explicitly changing `is_synced` (`SET is_synced = 1`). That is why `ON DUPLICATE KEY UPDATE` on existing rows (for example, the old default-customer seed in db.php) caused an endless dirty loop. Avoid writes that touch rows unnecessarily.
 
-### 3.4 Cloud mock DB
-`pos_cloud_mock` is a schema clone of `pos_system`. It is the sync target during development and was factory-reset alongside `pos_system`. Customer id=1 has the same UUID in both DBs: `ed5020ec-5ab2-4e3c-ab05-a5d4e1929f97`.
+**MySQL Triggers (per table — two triggers each):**
+
+```sql
+-- BEFORE INSERT: auto-assign UUID if not provided
+CREATE TRIGGER `{table}_before_insert` BEFORE INSERT ON `{table}` FOR EACH ROW
+BEGIN
+    IF NEW.uuid IS NULL THEN
+        SET NEW.uuid = UUID();
+    END IF;
+END;
+
+-- BEFORE UPDATE: mark row dirty whenever any business column changes
+CREATE TRIGGER `{table}_before_update` BEFORE UPDATE ON `{table}` FOR EACH ROW
+BEGIN
+    IF NEW.is_synced = OLD.is_synced THEN
+        SET NEW.is_synced = 0;
+    END IF;
+END;
+```
+
+Tables with these triggers (20 triggers total — BEFORE INSERT + BEFORE UPDATE per table):
+`categories`, `customers`, `products`, `sellers`, `bills`, `bill_items`, `payments`, `debt_payments`, `product_purchases`, `seller_payments`
+
+> **Rule for future developers:** Never manually set `uuid` in INSERT statements — the trigger handles it.
+> Never manually set `is_synced = 1` — only `api/sync_to_cloud.php` does that after confirmed cloud receipt.
 
 ---
 
-## 4. Core Workflows & Security
+### 3.2 Core Table Schemas
 
-### 4.1 Cloud Sync Engine
+#### `products`
 ```
-[any write] → trigger sets is_synced=0
-      │
-js/auto_sync.js (class AutoSync)
-  - setInterval 30 000 ms + one call 3 s after page load
-  - skips if !navigator.onLine or a sync is in flight (isSyncing flag)
-  - listens to window 'online'/'offline' → badge #sync-status-badge
-  - GET api/sync_to_cloud.php
-      │
-api/sync_to_cloud.php
-  1. If URL contains 'your-domain.com' or key == 'YOUR_SECRET_SYNC_KEY' → {"success":false,"configured":false}
-     → JS stops polling and shows a grey "المزامنة السحابية غير مفعّلة" badge
-  2. SELECT * FROM each of 10 tables WHERE is_synced=0
-  3. Empty → {"success":true,"message":"No new data to sync"}
-  4. cURL POST {"data":{table:[rows]}} with header X-POS-SYNC-KEY; 5 s connect / 20 s total timeout
-  5. HTTP 200 + success → in one transaction:
-       UPDATE table SET is_synced=1, last_synced_at=NOW() WHERE uuid IN (synced_uuids[table] ?? sent uuids)
-      │
-Receiver (currently cloud_mock/receive_sync.php)
-  - POST only (405 otherwise); hash_equals key check against 'mock_secret_123' (401 on failure)
-  - Tables processed in a whitelist, in FK order: categories, customers, sellers, products, bills, bill_items,
-    payments, debt_payments, product_purchases, seller_payments
-  - Column names filtered against information_schema (SQL-identifier whitelist)
-  - Rejects rows with no uuid. Rejects an `id` that already belongs to a different uuid (ID-conflict guard)
-  - INSERT ... ON DUPLICATE KEY UPDATE (id and uuid excluded from the update list), all inside one transaction
-  - Returns {"success":true,"synced_uuids":{...},"counts":{table:{inserted,updated}}}
+id                 INT AUTO_INCREMENT PK
+category_id        INT nullable (FK → categories.id)
+serial_number      VARCHAR(100) UNIQUE nullable
+name               VARCHAR(255) NOT NULL
+unit               VARCHAR(50)  DEFAULT 'قطعة'
+price              DECIMAL(10,2)   -- sell price per base unit (per ML if liquid)
+stock_quantity     DECIMAL(10,2)   -- base unit count (ML for liquids)
+storage_location   VARCHAR(255)
+bulk_unit_name     VARCHAR(50)     -- custom bulk name e.g. "كرتون"
+bulk_qty           INT DEFAULT 0   -- units per bulk pack
+bulk_barcode       VARCHAR(100)
+bulk_price         DECIMAL(10,2)
+is_liquid          TINYINT(1) DEFAULT 0
+ml_per_bottle      INT DEFAULT 0   -- ML capacity of one bottle
+bottle_price       DECIMAL(10,2)
+bottle_barcode     VARCHAR(100)
+bottles_per_box    INT DEFAULT 0
+box_price_liquid   DECIMAL(10,2)
+box_barcode_liquid VARCHAR(100)
+[legacy fields: carton_qty/price/barcode, box_qty/price/barcode, dozen_price/barcode]
+uuid, is_synced, last_synced_at
 ```
-Badge states: `online` (green, متصل - مزامن), `offline` (red, غير متصل - حفظ محلي), `syncing` (yellow, spinner), `error` (red, stays until the next success), `disabled` (grey).
 
-**Current config** (`api/sync_to_cloud.php` L5–6):
-`$cloud_api_url = 'http://localhost/POS_system-main/cloud_mock/receive_sync.php'`, `$secret_key = 'mock_secret_123'`.
+**Liquid product rule:** When `is_liquid = 1`, `stock_quantity` stores total ML. `price` = price-per-ML. The POS layer expands one liquid product into up to 3 sell cards (per-ML, per-bottle, per-box).
 
-**Production:** deploy a receiver to the host, then change those two lines. **Use `cloud_mock/receive_sync.php` as the base, not `cloud_api/receive_sync.php`** (reason in §7).
+#### `bills`
+```
+id               INT AUTO_INCREMENT PK
+type             ENUM('sale','purchase') DEFAULT 'sale'
+payment_method   VARCHAR(50) DEFAULT 'cash'
+                 -- values: cash|card|jeeb|onecash|haseb|kuraimi|floosak|deposit
+payment_method2  VARCHAR(50) nullable (split payment second method)
+customer_id      INT (→ customers.id) DEFAULT 1
+cashier_name     VARCHAR(100) DEFAULT 'Main User'
+total_amount     DECIMAL(10,2)
+paid_amount      DECIMAL(10,2)
+paid_amount2     DECIMAL(10,2) DEFAULT 0.00
+debt_amount      DECIMAL(10,2) DEFAULT 0.00
+created_at       TIMESTAMP DEFAULT current_timestamp()
+uuid, is_synced, last_synced_at
+```
 
-### 4.2 Atomic Transactions
-| Operation | File | Transaction | Catch type |
-|---|---|---|---|
-| `action=update_price_stock` (price + stock in one statement) | `api/products.php` L23–42 | yes | **`Throwable`**, with `inTransaction()` guard before `rollBack()` |
-| Invoice creation (bill → items → stock ± qty×unit_multiplier → customer debt + `payments` debt row) | `api/bills.php` L74–127 | yes | `Exception`, unconditional `rollBack()` |
-| Customer payment/debt entry | `api/payments.php` | yes | `Exception` |
-| Purchases (3 transactional blocks) | `api/purchases.php` | yes | `PDOException` / `Exception` |
-| Seller payments (3 blocks) | `api/seller_payments.php` | yes | `PDOException` / `Exception` |
-| Mark-synced batch | `api/sync_to_cloud.php` | yes | `Exception`, guarded |
-| Mock receiver upsert batch | `cloud_mock/receive_sync.php` | yes | `Throwable`, guarded |
-| **New product + initial purchase + seller debt** | `api/products.php` POST default branch | **NO** | `PDOException` |
-| `update_price`, `update_stock` | `api/products.php` | no (single statement) | none |
+#### `bill_items`
+```
+id          INT AUTO_INCREMENT PK
+bill_id     INT (→ bills.id)
+product_id  INT nullable (SET NULL if product deleted)
+quantity    DECIMAL(10,2)
+unit_price  DECIMAL(10,2)
+total_price DECIMAL(10,2)
+uuid, is_synced, last_synced_at
+```
 
-- **Rollback verified:** a failure injected mid-transaction into `update_price_stock` (2026-10-11) left price and stock unchanged. The pre-test copy is kept at `backups/products.php.pre_rollback_test`.
-- **Validation in bills.php:** rejects an empty `items` array and any line with qty ≤ 0, `unit_price` < 0, or `total_price` < 0 **before** the transaction starts. `update_price_stock` rejects non-numeric or negative price/stock.
-- **Known weaknesses:** `bills.php` trusts the client-sent `total_amount` and line totals (it does not recompute them server-side) and does not block stock from going negative.
+#### `customers`
+```
+id          INT AUTO_INCREMENT PK
+name        VARCHAR(150) NOT NULL
+phone       VARCHAR(50)
+total_debt  DECIMAL(10,2) DEFAULT 0.00  -- denormalized running balance
+uuid, is_synced, last_synced_at
+```
+> Special: id=1 is "عميل عابر (نقدي)" (walk-in cash customer). Auto-created by db.php. NEVER DELETE.
 
-**House rule for new write paths:** use `beginTransaction()` → work → `commit()`, with `catch (Throwable $e) { if ($pdo->inTransaction()) $pdo->rollBack(); ... }`.
+#### `sellers` (Suppliers)
+```
+id          INT AUTO_INCREMENT PK
+name        VARCHAR(100) NOT NULL
+phone       VARCHAR(50)
+total_debt  DECIMAL(10,2) DEFAULT 0.00  -- running unpaid balance owed TO supplier
+created_at  TIMESTAMP DEFAULT current_timestamp()
+uuid, is_synced, last_synced_at
+```
 
-### 4.3 Backup System, as actually implemented
-1. **UI export, manual:** `api/backup.php` streams an **Excel 2003 XML Spreadsheet** (`.xls`, RTL) named `تصدير_الإيصالات_والمبيعات_<date>.xls`. It has 4 sheets: customers & debts, sales/invoices, debt & payment ledger, products & inventory. It is a **report export, not a restorable DB backup.** It is linked from the "تصدير الإيصالات" control in `index.php`; the duplicate link was removed on 2026-10-11.
-2. **SQL dumps, manual via CLI:** these live in `backups/`, made with
-   `& 'c:\xampp\mysql\bin\mysqldump.exe' -u root --databases pos_system pos_cloud_mock > backups\<name>.sql`
-   - `pre_handover.sql` (~130 KB): full test dataset of both DBs before the factory reset
-   - `pre_rollback_invoice20.sql`: snapshot taken before the invoice #20 stock rollback
-3. **Automated `.bat` backup script: DOES NOT EXIST in the repo.** There is no `.bat` file, no Task Scheduler entry, and no cron logic anywhere in the codebase. If it is needed, it must be built (suggested: `backup.bat` that calls mysqldump with a timestamped filename, plus a Windows Task Scheduler entry and retention cleanup).
+#### `product_purchases` (Supplier Purchase Log)
+```
+id            INT AUTO_INCREMENT PK
+product_id    INT NOT NULL (no live FK constraint)
+seller_id     INT nullable
+quantity      DECIMAL(10,2) NOT NULL
+cost_price    DECIMAL(10,2) NOT NULL
+paid_amount   DECIMAL(10,2) NOT NULL   -- paid at purchase time
+note          TEXT nullable
+purchase_date DATETIME nullable
+uuid, is_synced, last_synced_at
+```
+> Debt per row = (quantity x cost_price) - paid_amount. Computed at query time, NOT stored.
 
-Restore a dump with: `& 'c:\xampp\mysql\bin\mysql.exe' -u root < backups\pre_handover.sql`. This **overwrites** both DBs.
+#### `seller_payments` (Supplier Debt Repayments)
+```
+id           INT AUTO_INCREMENT PK
+seller_id    INT NOT NULL
+amount       DECIMAL(10,2) NOT NULL
+payment_date DATETIME nullable
+note         TEXT nullable
+created_at   TIMESTAMP DEFAULT current_timestamp()
+uuid, is_synced, last_synced_at
+```
+
+#### `payments` (Customer Debt Ledger)
+```
+id           INT AUTO_INCREMENT PK
+customer_id  INT NOT NULL
+amount       DECIMAL(10,2) NOT NULL
+type         ENUM('payment','debt') DEFAULT 'payment'
+note         TEXT nullable
+bill_id      INT nullable (links debt entry to originating bill)
+items_details TEXT nullable (comma-separated product list for debt entries)
+created_at   DATETIME DEFAULT current_timestamp()
+uuid, is_synced, last_synced_at
+```
+
+#### `debt_payments` (Explicit Customer Debt Repayments)
+```
+id           INT AUTO_INCREMENT PK
+customer_id  INT nullable
+amount_paid  DECIMAL(10,2) NOT NULL
+payment_date TIMESTAMP DEFAULT current_timestamp()
+uuid, is_synced, last_synced_at
+```
+
+#### `categories`
+```
+id   INT AUTO_INCREMENT PK
+name VARCHAR(100) NOT NULL
+uuid, is_synced, last_synced_at
+```
 
 ---
 
-## 5. Directory Structure
+## 4. Core Financial Workflows
+
+### 4.1 Invoice Generation (api/bills.php POST) — Atomic Transaction
+```
+BEGIN TRANSACTION
+  1. INSERT INTO bills → billId
+  2. For each item:
+       INSERT INTO bill_items (billId, productId, qty, unitPrice, totalPrice)
+       UPDATE products SET stock_quantity = stock_quantity +/- (qty x unit_multiplier)
+       -- unit_multiplier: 1 for unit, ml_per_bottle for bottle, ml_per_bottle x bottles_per_box for box
+  3. IF type='sale' AND totalAmount > paidAmount + paidAmount2:
+       debtDiff = totalAmount - (collectedPaid1 + collectedPaid2)
+       UPDATE customers SET total_debt = total_debt + debtDiff
+       INSERT INTO payments (type='debt', bill_id, items_details, ...)
+COMMIT / ROLLBACK on Exception
+```
+Split payment: bill can have two methods. `deposit` method = charge to customer debt tab.
+
+### 4.2 Supplier Purchase (api/purchases.php POST) — Atomic Transaction
+```
+BEGIN TRANSACTION
+  1. INSERT INTO product_purchases
+  2. IF sellerId: debt=(qty x costPrice)-paidAmount; IF debt>0: UPDATE sellers.total_debt += debt
+  3. UPDATE products SET stock_quantity = stock_quantity + qty
+COMMIT / ROLLBACK
+```
+PUT (edit): fetch old row, revert old stock+debt, update record, apply new stock+debt — all in one tx.
+DELETE: revert stock+debt, then delete — all in one tx.
+
+### 4.3 Opening-Stock Purchase on Product Creation (api/products.php POST)
+```
+BEGIN TRANSACTION
+  1. INSERT INTO products → newProductId
+  2. IF cost_price provided AND stock_quantity > 0:
+       INSERT INTO product_purchases (newProductId, ...)
+       IF sellerId:
+         IF debt > 0: UPDATE sellers.total_debt += debt
+         IF paidAmount > 0: INSERT INTO seller_payments (sellerId, paidAmount, ...)
+COMMIT / ROLLBACK (with inTransaction() guard)
+```
+
+### 4.4 Supplier Payment (api/seller_payments.php POST)
+```
+BEGIN TRANSACTION
+  1. INSERT INTO seller_payments (seller_id, amount, note)
+  2. UPDATE sellers SET total_debt = total_debt - amount
+COMMIT / ROLLBACK
+```
+
+### 4.5 Error Handling Notes
+- Prefer `catch (Throwable $e)` inside transactions (catches both Exception and Error).
+- Always use `if ($pdo->inTransaction()) $pdo->rollBack();` before echoing error JSON.
+- `bills.php` uses `catch (Exception $e)` without inTransaction guard — known issue.
+
+---
+
+## 5. Supplier Ledger System
+
+Three tables, denormalized aggregate:
+- `sellers.total_debt` — always-current (mutated atomically with every purchase/payment)
+- `product_purchases` — itemized purchase history (debit side)
+- `seller_payments` — payment history (credit side)
+
+### API (api/seller_reports.php GET)
+| Action | Returns |
+|---|---|
+| (none) | Global totals + full purchase log + full payment log |
+| ?action=balances | All sellers: id, name, phone, total_debt |
+| ?action=account_statement&seller_id=N | Seller meta + merged chronological purchase+payment rows |
+
+### JS Functions (js/app.js)
+- `loadSellerBalances()` — renders "حسابات الموردين" tab table with debt highlighted in red
+- `openAccountStatement(sellerId, name)` — opens xl modal, renders running balance column
+- `openPaySellerFromStatement()` — opens payment modal pre-filled from cached seller context
+- `submitSellerPayment()` — after success: refreshes balances table + re-renders open statement + reloads global logs
+
+---
+
+## 6. Cloud Sync Engine
+
+### js/auto_sync.js — class AutoSync
+- Initial sync: 3 seconds after page load
+- Recurring: every 30,000ms (30 seconds)
+- Guard: skips if `!navigator.onLine` OR `this.isSyncing` (no concurrent syncs)
+- If cloud returns `{configured:false}`: stops polling permanently via clearInterval
+
+### api/sync_to_cloud.php
+Configure at top: `$cloud_api_url` and `$secret_key`
+- Currently mocked to `cloud_mock/receive_sync.php` (local loopback)
+- Sends: POST JSON `{"data": {tableName: [...rows with is_synced=0...]}}` + `X-POS-SYNC-KEY` header
+- On HTTP 200 + success: marks sent rows `is_synced=1, last_synced_at=NOW()` in transaction
+- Production receiver template: `cloud_api/receive_sync.php`
+
+Synced tables (10): categories, customers, products, sellers, bills, bill_items, payments, debt_payments, product_purchases, seller_payments
+
+---
+
+## 7. Automated Backup System
+
+### api/auto_backup.php
+- Interval: 43200s (12h) — checked via `backups/last_auto_backup.txt`
+- Override: `?force=1` bypasses interval
+- Command: `mysqldump -u root --routines --triggers --single-transaction pos_system`
+- Output: `backups/pos_system_YYYY-MM-DD_HH-mm.sql`
+- Retention: deletes files older than 14 days from backups/
+- Telegram: if configured, sends .sql as document via Bot API; records timestamp only on HTTP 200
+- Trigger (auto_sync.js): 10s after page load + every 30min, only when `navigator.onLine`
+
+---
+
+## 8. API Endpoint Reference
+
+| File | Methods | Resource |
+|---|---|---|
+| api/db.php | — | PDO connection + inline schema migrations |
+| api/products.php | GET, POST, DELETE | Products; GET ?action=liquid_summary; POST actions: (none)=create, update_price_stock, update_stock, update_price |
+| api/bills.php | GET, POST | Bills; GET ?id=N returns bill+items |
+| api/customers.php | GET, POST, DELETE | Customers |
+| api/sellers.php | GET, POST | Suppliers |
+| api/purchases.php | POST, PUT, DELETE | Supplier purchase log (all atomic) |
+| api/seller_payments.php | POST, PUT, DELETE | Supplier payment log (all atomic) |
+| api/seller_reports.php | GET | Supplier reports (?action=balances / account_statement) |
+| api/payments.php | GET, POST, DELETE | Customer debt payment log |
+| api/reports.php | GET | Sales analytics (date + method filters) |
+| api/categories.php | GET, POST, DELETE | Product categories |
+| api/sync_to_cloud.php | GET | Cloud sync push |
+| api/auto_backup.php | GET | Timed backup (?force=1) |
+| api/backup.php | GET | Manual backup management |
+
+---
+
+## 9. Directory Structure
 
 ```
 POS_system-main/
-├── index.php              # SPA shell (~78 KB): all pages/modals as hidden sections, RTL Arabic UI, sync badge
-├── setup.php              # First-run: creates DB from database.sql
-├── database.sql           # ⚠ STALE base schema (no sync cols, no multi-unit/liquid cols)
-├── migrate_sync.php       # Idempotent: adds uuid/is_synced/last_synced_at + 20 triggers to 10 tables
-├── SESSION_REPORT.md      # Narrative report of the 2026-10-11 session (some claims are imprecise; trust this file)
-├── PROJECT_CONTEXT.md     # ← this file
-├── api/                   # JSON endpoints (all `require 'db.php'`)
-│   ├── db.php             # PDO connection + per-request self-migrations + walk-in customer guarantee
-│   ├── products.php       # GET list/search; POST create | update_price | update_price_stock (atomic) | update_stock; DELETE
-│   ├── bills.php          # GET list (last 50) / by id with items; POST create invoice (atomic)
-│   ├── customers.php      # GET; POST create (unique name); DELETE (id 1 protected)
-│   ├── payments.php       # customer payments/debts ledger (atomic)
-│   ├── categories.php     # CRUD categories
-│   ├── sellers.php        # CRUD suppliers
-│   ├── purchases.php      # supplier stock purchases + purchase history (atomic)
-│   ├── seller_payments.php# supplier payments (atomic)
-│   ├── reports.php        # sales/profit reports
-│   ├── seller_reports.php # supplier reports
-│   ├── backup.php         # Excel XML export (download)
-│   └── sync_to_cloud.php  # local sync worker (pushes dirty rows)
+├── index.php                  # Complete SPA frontend (HTML + all sections)
+├── setup.php                  # One-time DB creation
+├── migrate_sync.php           # Adds uuid/is_synced/triggers to all tables
+├── database.sql               # Legacy schema (OUTDATED — do not use for fresh install)
+├── PROJECT_CONTEXT.md         # This file
+│
+├── api/                       # PHP REST endpoints (one file per resource, 14 files)
+│   ├── db.php                 # PDO + schema migrations on every connection
+│   ├── products.php           # Products CRUD + liquid_summary
+│   ├── bills.php              # Invoice creation (atomic)
+│   ├── customers.php
+│   ├── sellers.php
+│   ├── purchases.php          # Supplier purchases (atomic POST/PUT/DELETE)
+│   ├── seller_payments.php    # Supplier payments (atomic POST/PUT/DELETE)
+│   ├── seller_reports.php     # Balances + account statement + global log
+│   ├── payments.php           # Customer debt payments
+│   ├── reports.php            # Sales analytics
+│   ├── categories.php
+│   ├── sync_to_cloud.php      # Cloud sync push (is_synced=0 → cloud → mark synced)
+│   ├── auto_backup.php        # Timed mysqldump + Telegram
+│   └── backup.php             # Manual backup manager
+│
 ├── js/
-│   ├── app.js             # all UI logic: `app` object (cart, POS, inventory, customers, statements, modals, fetchAPI)
-│   └── auto_sync.js       # AutoSync class: 30 s polling, online/offline badge
-├── css/style.css          # theme / custom styles
-├── vendor/                # ALL third-party assets (offline) — see §2
-│   ├── bootstrap.rtl.min.css, bootstrap.bundle.min.js, jquery.min.js, select2.min.(css|js)
-│   ├── fontawesome/{css/all.min.css, webfonts/*}
-│   └── cairo/{cairo.css, *.woff2}
-├── backups/               # manual mysqldump snapshots + pre-test file copies (NOT auto-generated)
-├── cloud_mock/
-│   └── receive_sync.php   # hardened local mock receiver → DB pos_cloud_mock (secret 'mock_secret_123')
-└── cloud_api/
-    └── receive_sync.php   # original production receiver template (⚠ weaker — see §7)
+│   ├── app.js                 # Monolithic app (~1,800 lines): UI + state + all API calls
+│   └── auto_sync.js           # AutoSync class (30s poll) + backup trigger
+│
+├── css/                       # Minimal custom overrides
+│
+├── vendor/                    # ALL frontend deps — strictly local, zero CDN
+│   ├── bootstrap.rtl.min.css
+│   ├── bootstrap.bundle.min.js
+│   ├── jquery.min.js
+│   ├── select2.min.js + select2.min.css
+│   ├── cairo/                 # Cairo Arabic font (self-hosted .woff2)
+│   └── fontawesome/           # FontAwesome 6 (local webfonts + CSS)
+│
+├── backups/                   # Auto-generated SQL dumps (14-day retention)
+│   └── last_auto_backup.txt   # Unix timestamp of last auto-backup
+│
+├── cloud_mock/                # Local loopback sync receiver (development/testing)
+│   └── receive_sync.php
+│
+└── cloud_api/                 # Production cloud receiver template
+    └── receive_sync.php
 ```
 
 ---
 
-## 6. Conventions
+## 10. Known Issues & Gotchas
 
-- **Language:** UI strings and error messages are Arabic. Keep that style, e.g. `{'success':false,'error':'...'}`.
-- **Responses:** always `header('Content-Type: application/json; charset=utf-8')`, and always include the `success` key.
-- **Frontend calls:** go through `app.fetchAPI(url, options)` in `app.js`, which sends a JSON body.
-- **SQL:** always use prepared statements for values. Table/column identifiers must come from hard-coded whitelists.
-- **Never** run TRUNCATE/DROP or a broad DELETE without explicit user consent and a fresh mysqldump in `backups/`.
-- **Don't** add UPDATE statements that touch rows unnecessarily (the trigger marks them dirty and causes re-sync churn).
-- **Testing:** use `& 'c:\xampp\php\php.exe' script.php` (php is NOT on PATH) and `curl.exe -s http://localhost/POS_system-main/api/...`. PowerShell mangles `$` in `php -r`, so prefer temp script files.
+1. **`database.sql` is outdated.** Missing: carton/box/bulk/liquid columns, debt_amount, sync columns, serial_number UNIQUE, payment_method2, paid_amount2. Use `mysqldump --no-data --routines --triggers pos_system` for a fresh schema.
 
----
+2. **Catch type inconsistency.** `bills.php` uses `catch (Exception $e)` — misses PHP `Error` subclasses. Use `catch (Throwable $e)` inside transactions going forward.
 
-## 7. Known Gaps, Risks & Doc Discrepancies (read before editing)
+3. **`bills.php` rollback missing guard.** Calls `$pdo->rollBack()` without `if ($pdo->inTransaction())` check.
 
-1. **No `.bat` / scheduled backup exists.** Only the manual Excel export and manual mysqldumps exist (§4.3).
-2. **`database.sql` is out of date** compared with the live DB (missing the carton/box/dozen/bulk/liquid columns, `debt_amount`, the sync columns, and the UNIQUE on `serial_number`; it also declares FKs on `product_purchases`/`seller_payments` that the live DB lacks). A fresh install from `setup.php` + `database.sql` would break `products.php` inserts. **Fix:** regenerate it with `mysqldump --no-data pos_system` (triggers included) or extend the migrations.
-3. **Catch types are inconsistent.** Only `update_price_stock` and the mock receiver use `catch (Throwable)`. `bills.php`, `payments.php`, `purchases.php`, `seller_payments.php` and `sync_to_cloud.php` use `Exception`/`PDOException`. A PHP `Error` (e.g. a `TypeError`) inside those transactions would skip the rollback; PDO then rolls back implicitly when the connection closes, but the client gets a fatal error instead of JSON. `bills.php` also calls `rollBack()` without an `inTransaction()` guard.
-4. **Product creation is not atomic.** The product INSERT, the `product_purchases` INSERT and the seller debt UPDATE are separate statements with no transaction.
-5. **`cloud_api/receive_sync.php` (production template) is weaker than the mock:** it interpolates incoming JSON keys directly as column names (**SQL-injection vector** for anyone who holds the key), compares the key with `!==` instead of `hash_equals`, has no table/column whitelist and no id-conflict guard, uses a placeholder key `YOUR_SECRET_SYNC_KEY` and DB `cloud_pos_system`, and returns no `counts`. **Deploy the `cloud_mock` version instead** (change its DB credentials and secret).
-6. **UUIDs do not yet make multi-terminal sync safe.** The payload still includes the local integer `id`, and the cloud tables use `id` as PK. Two terminals creating bill id=1 would collide; the mock receiver detects this and fails the whole batch. True multi-store support needs cloud-side surrogate ids, or FK references remapped by uuid.
-7. **Sync race window:** a row edited between the worker's SELECT and its mark-synced UPDATE is marked synced without its newer version being sent. Fix: mark synced only `WHERE uuid IN (...) AND <row unchanged>`, e.g. by comparing an `updated_at`/version column.
-8. **No authentication or CSRF protection** on any endpoint. Anyone on the LAN can call `api/*`, including the sync trigger and the Excel export containing customer data.
-9. **Server trusts client totals** in `bills.php` (no server-side price recomputation) and allows negative stock.
-10. **`db.php` runs `ALTER TABLE` statements on every request** (wrapped in try/catch). This works, but it is wasteful; move them into a one-time migration.
-11. `SESSION_REPORT.md` overstates a few items (e.g. jQuery "3.7.x" — the actual version is 3.6.0 — and "UUIDs eliminate PK collisions"). **This file is authoritative.**
+4. **No live FK constraints on `product_purchases` / `seller_payments`.** Deleting a product or seller orphans these rows — no cascade. UI already blocks product deletion if sales exist, but not for purchase/payment orphans.
+
+5. **`sellers.total_debt` and `customers.total_debt` are denormalized.** Mutated atomically on each operation. Trust the stored value. If drift occurs, recalculate manually:
+   ```sql
+   -- Recalculate seller debt:
+   UPDATE sellers s SET total_debt = (
+     SELECT COALESCE(SUM(pp.quantity * pp.cost_price - pp.paid_amount), 0)
+     FROM product_purchases pp WHERE pp.seller_id = s.id
+   ) - (SELECT COALESCE(SUM(sp.amount), 0) FROM seller_payments sp WHERE sp.seller_id = s.id);
+   ```
+
+6. **`database.sql` FK declarations will fail on fresh install via setup.php** (live DB has no such FKs). Do not add FK constraints to product_purchases/seller_payments without updating the migration.
+
+7. **Auto-backup requires `navigator.onLine`** even for local-only backups. Remove that guard in auto_sync.js lines 82-88 if always-local backup is needed.
 
 ---
 
-## 8. Current State Snapshot (2026-10-15)
+## 11. Extension Points
 
-| Table | pos_system | pos_cloud_mock |
-|---|---|---|
-| customers | 1 (walk-in, id=1) | 1 (same uuid) |
-| all other 9 tables | 0 (AUTO_INCREMENT reset → next id 1) | 0 |
+### Accounting Dashboard
+- Gross profit = `SUM(bill_items.total_price) - SUM(pp.quantity * pp.cost_price)` joined on product_id
+- Daily revenue: `SELECT DATE(created_at), SUM(total_amount) FROM bills WHERE type='sale' GROUP BY DATE(created_at)`
+- No new tables needed for basic P&L
 
-The sync endpoint returns `{"success":true,"message":"No new data to sync"}`. The system is ready for client data entry.
+### Mobile App / External API
+- Use `uuid` as stable cross-device primary key
+- Sync protocol: POST to cloud_api/receive_sync.php with `X-POS-SYNC-KEY` header
+- Response: `{"success":true,"synced_uuids":{"tableName":["uuid1","uuid2"]}}`
+
+### Multi-cashier / Auth
+- `bills.cashier_name` already stores cashier string — usable for audit without a users table
+- Add `users` table + session check in db.php include
+
+### Barcode Scanner
+- Already supported: POS search matches serial_number, bulk_barcode, bottle_barcode, box_barcode_liquid
+- USB HID scanners (type barcode + Enter) work with existing keydown handler in app.js

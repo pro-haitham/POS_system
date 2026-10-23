@@ -449,6 +449,46 @@ const app = {
         }
     },
 
+    // Handles the "إضافة مورد جديد" modal form in the Suppliers section
+    async submitNewSeller(event) {
+        event.preventDefault();
+        const form = document.getElementById('add-seller-form');
+        const nameInput = document.getElementById('add-seller-name');
+        const phoneInput = document.getElementById('add-seller-phone');
+        const submitBtn = document.getElementById('add-seller-submit');
+
+        const name = nameInput.value.trim();
+        const phone = phoneInput.value.trim();
+
+        if (!name) {
+            nameInput.classList.add('is-invalid');
+            nameInput.focus();
+            return;
+        }
+        nameInput.classList.remove('is-invalid');
+
+        submitBtn.disabled = true;
+        try {
+            const res = await this.fetchAPI('api/sellers.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, phone })
+            });
+
+            if (res && res.success) {
+                const modalEl = document.getElementById('addSellerModal');
+                (bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl)).hide();
+                form.reset();
+                this.showToast(`تم إضافة المورد "${name}" بنجاح`);
+                await this.loadSellers(); // refreshes all supplier dropdowns & the sellers list
+            } else {
+                alert((res && res.error) || 'تعذر إضافة المورد');
+            }
+        } finally {
+            submitBtn.disabled = false;
+        }
+    },
+
     openRestockModal(id, name) {
         document.getElementById('restock-product-id').value = id;
         document.getElementById('restock-product-name').value = name;
@@ -547,24 +587,168 @@ const app = {
     },
 
     async submitSellerPayment() {
-        const id = document.getElementById('pay-seller-id').value;
+        const id   = document.getElementById('pay-seller-id').value;
         const amount = document.getElementById('pay-seller-amount').value;
         const note = document.getElementById('pay-seller-note').value;
-        
-        if (!amount || parseFloat(amount) <= 0) return alert('أدخل مبلغاً صحيحاً');
-        
+
+        if (!amount || parseFloat(amount) <= 0) return alert('\u0623\u062f\u062e\u0644 \u0645\u0628\u0644\u063a\u0627\u064b \u0635\u062d\u064a\u062d\u0627\u064b');
+
         const res = await this.fetchAPI('api/seller_payments.php', {
             method: 'POST',
             body: JSON.stringify({ seller_id: id, amount: parseFloat(amount), note })
         });
-        
+
         if (res.success) {
-            this.showToast('تم تسجيل سداد المورد بنجاح');
+            this.showToast('\u062a\u0645 \u062a\u0633\u062c\u064a\u0644 \u0633\u062f\u0627\u062f \u0627\u0644\u0645\u0648\u0631\u062f \u0628\u0646\u062c\u0627\u062d');
             bootstrap.Modal.getInstance(document.getElementById('paySellerModal')).hide();
-            this.loadSellers(); // Refresh sellers list and debt
+            await this.loadSellers(); // refresh sidebar + dropdowns
+            this.loadSellerReports(); // refresh global logs
+
+            // If the statement modal is still open, re-render it with fresh data
+            const stmtModal = document.getElementById('accountStatementModal');
+            if (stmtModal && stmtModal.classList.contains('show') && this._stmtSellerId) {
+                this.openAccountStatement(this._stmtSellerId, this._stmtSellerName);
+            }
+            // Refresh balances table if that tab is visible
+            const balancesTbody = document.getElementById('supplier-balances-table');
+            if (balancesTbody) this.loadSellerBalances();
         } else {
             alert(res.error);
         }
+    },
+
+    // ── SUPPLIER BALANCES TAB ─────────────────────────────────────────────────
+    async loadSellerBalances() {
+        const tbody = document.getElementById('supplier-balances-table');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+
+        const res = await this.fetchAPI('api/seller_reports.php?action=balances');
+        if (!res || !res.success) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger py-3">\u062e\u0637\u0623 \u0641\u064a \u062c\u0644\u0628 \u0628\u064a\u0627\u0646\u0627\u062a \u0627\u0644\u0645\u0648\u0631\u062f\u064a\u0646</td></tr>';
+            return;
+        }
+        if (!res.sellers || res.sellers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">\u0644\u0627 \u064a\u0648\u062c\u062f \u0645\u0648\u0631\u062f\u0648\u0646 \u0645\u0633\u062c\u0644\u0648\u0646</td></tr>';
+            return;
+        }
+
+        const fmt = n => Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        tbody.innerHTML = res.sellers.map((s, i) => {
+            const debt = parseFloat(s.total_debt || 0);
+            const hasDebt = debt > 0;
+            return `
+                <tr>
+                    <td class="text-muted small">${i + 1}</td>
+                    <td class="fw-bold text-start">${esc(s.name)}</td>
+                    <td class="text-muted">${esc(s.phone || '-')}</td>
+                    <td class="fw-bold ${hasDebt ? 'text-danger' : 'text-success'} fs-6">
+                        ${hasDebt ? '<i class="fas fa-exclamation-circle me-1"></i>' : '<i class="fas fa-check-circle me-1"></i>'}
+                        ${fmt(debt)}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-dark me-1"
+                                onclick="app.openAccountStatement(${s.id}, '${esc(s.name).replace(/'/g, "\\'")}')"
+                                title="\u0643\u0634\u0641 \u062d\u0633\u0627\u0628">
+                            <i class="fas fa-file-invoice"></i> \u0643\u0634\u0641 \u062d\u0633\u0627\u0628
+                        </button>
+                        ${hasDebt ? `<button class="btn btn-sm btn-danger"
+                                onclick="app.openPaySellerModal(${s.id}, '${esc(s.name).replace(/'/g, "\\'")}',${ debt })"
+                                title="\u062a\u0633\u062f\u064a\u062f \u062f\u0641\u0639\u0629">
+                            <i class="fas fa-hand-holding-usd"></i> \u062a\u0633\u062f\u064a\u062f
+                        </button>` : ''}
+                    </td>
+                </tr>`;
+        }).join('');
+    },
+
+    // ── ACCOUNT STATEMENT MODAL ────────────────────────────────────────────────
+    async openAccountStatement(sellerId, sellerName) {
+        // Cache for refresh-after-payment
+        this._stmtSellerId   = sellerId;
+        this._stmtSellerName = sellerName;
+
+        document.getElementById('stmt-seller-name').textContent  = sellerName;
+        document.getElementById('stmt-seller-phone').textContent = '\u062c\u0627\u0631\u064a \u0627\u0644\u062a\u062d\u0645\u064a\u0644...';
+        document.getElementById('stmt-seller-debt').textContent  = '';
+        document.getElementById('stmt-rows').innerHTML           =
+            '<tr><td colspan="9" class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i></td></tr>';
+
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('accountStatementModal'));
+        modal.show();
+
+        const res = await this.fetchAPI(`api/seller_reports.php?action=account_statement&seller_id=${sellerId}`);
+        if (!res || !res.success) {
+            document.getElementById('stmt-rows').innerHTML =
+                `<tr><td colspan="9" class="text-center text-danger py-3">${res?.error || '\u062e\u0637\u0623 \u063a\u064a\u0631 \u0645\u062a\u0648\u0642\u0639'}</td></tr>`;
+            return;
+        }
+
+        const fmt  = n => n != null ? Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-';
+        const esc  = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const debt = parseFloat(res.seller?.total_debt || 0);
+
+        document.getElementById('stmt-seller-phone').textContent = res.seller?.phone || '-';
+        const debtEl = document.getElementById('stmt-seller-debt');
+        debtEl.textContent  = fmt(debt);
+        debtEl.className    = 'fs-5 fw-bold ' + (debt > 0 ? 'text-danger' : 'text-success');
+
+        // Wire the pay button inside the modal
+        document.getElementById('stmt-pay-btn').style.display = debt > 0 ? '' : 'none';
+
+        if (!res.rows || res.rows.length === 0) {
+            document.getElementById('stmt-rows').innerHTML =
+                '<tr><td colspan="9" class="text-center text-muted py-4">\u0644\u0627 \u062a\u0648\u062c\u062f \u0639\u0645\u0644\u064a\u0627\u062a \u0645\u0633\u062c\u0644\u0629 \u0644\u0647\u0630\u0627 \u0627\u0644\u0645\u0648\u0631\u062f</td></tr>';
+            return;
+        }
+
+        // Compute running balance chronologically
+        let runningDebt = 0;
+        const rows = res.rows.map(r => {
+            let rowHtml = '';
+            if (r.tx_type === 'purchase') {
+                const totalCost = parseFloat(r.total_cost || 0);
+                const paidNow   = parseFloat(r.paid_amount || 0);
+                const txDebt    = parseFloat(r.debt_amount || 0);
+                runningDebt    += txDebt;
+                rowHtml = `
+                    <tr class="table-warning">
+                        <td class="small" dir="ltr">${esc(r.tx_date || '-')}</td>
+                        <td><span class="badge bg-warning text-dark"><i class="fas fa-shopping-bag"></i> \u0634\u0631\u0627\u0621</span></td>
+                        <td class="fw-bold text-start">${esc(r.product_name || '-')}</td>
+                        <td>${fmt(r.quantity)}</td>
+                        <td>${fmt(r.cost_price)}</td>
+                        <td class="fw-bold">${fmt(totalCost)}</td>
+                        <td class="text-success">${fmt(paidNow)}</td>
+                        <td class="${runningDebt > 0 ? 'text-danger fw-bold' : 'text-success'}">${fmt(runningDebt)}</td>
+                        <td class="small text-muted">${esc(r.note || '')}</td>
+                    </tr>`;
+            } else {
+                const paid = parseFloat(r.paid_amount || 0);
+                runningDebt = Math.max(0, runningDebt - paid);
+                rowHtml = `
+                    <tr class="table-success">
+                        <td class="small" dir="ltr">${esc(r.tx_date || '-')}</td>
+                        <td><span class="badge bg-success"><i class="fas fa-money-bill-wave"></i> \u0633\u062f\u0627\u062f</span></td>
+                        <td colspan="4" class="text-start text-muted">\u062f\u0641\u0639\u0629 \u0633\u062f\u0627\u062f \u0644\u0644\u0645\u0648\u0631\u062f</td>
+                        <td class="text-success fw-bold">${fmt(paid)}</td>
+                        <td class="${runningDebt > 0 ? 'text-danger fw-bold' : 'text-success'}">${fmt(runningDebt)}</td>
+                        <td class="small text-muted">${esc(r.note || '')}</td>
+                    </tr>`;
+            }
+            return rowHtml;
+        });
+        document.getElementById('stmt-rows').innerHTML = rows.join('');
+    },
+
+    // Called from inside the account statement modal footer
+    openPaySellerFromStatement() {
+        if (!this._stmtSellerId) return;
+        const seller = this.sellers.find(s => s.id == this._stmtSellerId);
+        const debt   = seller ? parseFloat(seller.total_debt || 0) : 0;
+        this.openPaySellerModal(this._stmtSellerId, this._stmtSellerName, debt);
     },
 
     // --- INVENTORY / STORAGE ---
@@ -1463,57 +1647,74 @@ const app = {
     // --- SELLER REPORTS & EDITING ---
     async loadSellerReports() {
         const res = await this.fetchAPI('api/seller_reports.php');
-        if (!res || !res.success) return alert('خطأ في جلب تقارير الموردين');
+        const purchasesTbody = document.getElementById('sr-purchases-table');
+        const paymentsTbody  = document.getElementById('sr-payments-table');
+        const emptyRow = (cols, msg, cls = 'text-muted') =>
+            `<tr><td colspan="${cols}" class="text-center ${cls} py-4"><i class="fas fa-inbox me-1"></i>${msg}</td></tr>`;
+
+        if (!res || !res.success) {
+            const msg = 'تعذر جلب تقارير الموردين' + (res?.error ? ': ' + res.error : '');
+            if (purchasesTbody) purchasesTbody.innerHTML = emptyRow(10, msg, 'text-danger');
+            if (paymentsTbody)  paymentsTbody.innerHTML  = emptyRow(5, msg, 'text-danger');
+            return;
+        }
+        if (res.error_msg) console.warn('[SellerReports]', res.error_msg);
+
+        const num = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const totals    = res.totals || {};
+        const purchases = Array.isArray(res.purchases) ? res.purchases : [];
+        const payments  = Array.isArray(res.payments)  ? res.payments  : [];
 
         // Render Totals
-        document.getElementById('sr-total-purchases').innerText = parseFloat(res.totals.total_purchases).toFixed(2);
-        document.getElementById('sr-total-payments').innerText = parseFloat(res.totals.total_payments).toFixed(2);
-        document.getElementById('sr-total-debt').innerText = parseFloat(res.totals.total_debt).toFixed(2);
+        document.getElementById('sr-total-purchases').innerText = num(totals.total_purchases).toFixed(2);
+        document.getElementById('sr-total-payments').innerText  = num(totals.total_payments).toFixed(2);
+        document.getElementById('sr-total-debt').innerText      = num(totals.total_debt).toFixed(2);
 
         // Render Purchases
-        const purchasesTbody = document.getElementById('sr-purchases-table');
-        purchasesTbody.innerHTML = '';
-        res.purchases.forEach(p => {
-            const total = parseFloat(p.quantity) * parseFloat(p.cost_price);
-            const debt = Math.max(0, total - parseFloat(p.paid_amount));
-            purchasesTbody.innerHTML += `
+        if (purchasesTbody) {
+            purchasesTbody.innerHTML = purchases.length === 0
+                ? emptyRow(10, 'لا توجد عمليات شراء مسجلة')
+                : purchases.map(p => {
+                    const total = num(p.quantity) * num(p.cost_price);
+                    const debt  = Math.max(0, total - num(p.paid_amount));
+                    return `
                 <tr>
-                    <td class="small" dir="ltr">${p.purchase_date}</td>
-                    <td class="fw-bold">${p.product_name}</td>
-                    <td>${p.seller_name || '-'}</td>
-                    <td>${p.quantity}</td>
-                    <td>${p.cost_price}</td>
+                    <td class="small" dir="ltr">${esc(p.purchase_date || '-')}</td>
+                    <td class="fw-bold">${esc(p.product_name || 'منتج محذوف')}</td>
+                    <td>${esc(p.seller_name || '-')}</td>
+                    <td>${num(p.quantity)}</td>
+                    <td>${num(p.cost_price).toFixed(2)}</td>
                     <td class="fw-bold">${total.toFixed(2)}</td>
-                    <td class="text-success">${p.paid_amount}</td>
+                    <td class="text-success">${num(p.paid_amount).toFixed(2)}</td>
                     <td class="text-danger">${debt > 0 ? debt.toFixed(2) : '-'}</td>
-                    <td class="small text-muted">${p.note || ''}</td>
+                    <td class="small text-muted">${esc(p.note)}</td>
                     <td>
                         <button class="btn btn-sm btn-primary" onclick="app.openEditPurchase(${p.id})"><i class="fas fa-edit"></i></button>
                         <button class="btn btn-sm btn-danger" onclick="app.deletePurchase(${p.id})"><i class="fas fa-trash"></i></button>
                     </td>
-                </tr>
-            `;
-        });
-        this._currentPurchases = res.purchases; // Cache for editing
+                </tr>`;
+                }).join('');
+        }
+        this._currentPurchases = purchases; // Cache for editing
 
         // Render Payments
-        const paymentsTbody = document.getElementById('sr-payments-table');
-        paymentsTbody.innerHTML = '';
-        res.payments.forEach(p => {
-            paymentsTbody.innerHTML += `
+        if (paymentsTbody) {
+            paymentsTbody.innerHTML = payments.length === 0
+                ? emptyRow(5, 'لا توجد دفعات سداد مسجلة')
+                : payments.map(p => `
                 <tr>
-                    <td class="small" dir="ltr">${p.created_at}</td>
-                    <td class="fw-bold">${p.seller_name}</td>
-                    <td class="text-success fw-bold">${p.amount}</td>
-                    <td class="small text-muted">${p.note || ''}</td>
+                    <td class="small" dir="ltr">${esc(p.payment_date || p.created_at || '-')}</td>
+                    <td class="fw-bold">${esc(p.seller_name || '-')}</td>
+                    <td class="text-success fw-bold">${num(p.amount).toFixed(2)}</td>
+                    <td class="small text-muted">${esc(p.note)}</td>
                     <td>
                         <button class="btn btn-sm btn-success" onclick="app.openEditPayment(${p.id})"><i class="fas fa-edit"></i></button>
                         <button class="btn btn-sm btn-danger" onclick="app.deletePayment(${p.id})"><i class="fas fa-trash"></i></button>
                     </td>
-                </tr>
-            `;
-        });
-        this._currentPayments = res.payments;
+                </tr>`).join('');
+        }
+        this._currentPayments = payments;
     },
 
     openEditPurchase(id) {
@@ -1687,6 +1888,53 @@ const app = {
                 </tr>
             `;
         });
+    },
+
+    // ── Settings ─────────────────────────────────────────────────────────────
+    async loadSettings() {
+        try {
+            const res = await this.fetchAPI('api/settings.php');
+            if (!res.success) return;
+            const s = res.settings || {};
+            const bi = document.getElementById('setting-backup-interval');
+            const kl = document.getElementById('setting-keep-local-days');
+            const tt = document.getElementById('setting-telegram-token');
+            const tc = document.getElementById('setting-telegram-chat-id');
+            if (bi) bi.value = s.backup_interval ?? '43200';
+            if (kl) kl.value = s.keep_local_days ?? '14';
+            if (tt) tt.value = s.telegram_token ?? '';
+            if (tc) tc.value = s.telegram_chat_id ?? '';
+        } catch (e) {
+            console.error('[Settings] loadSettings error:', e);
+        }
+    },
+
+    async saveSettings() {
+        const btn = document.getElementById('settings-save-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>جاري الحفظ...'; }
+        try {
+            const payload = {
+                backup_interval:  document.getElementById('setting-backup-interval')?.value  ?? '43200',
+                keep_local_days:  document.getElementById('setting-keep-local-days')?.value  ?? '14',
+                telegram_token:   document.getElementById('setting-telegram-token')?.value   ?? '',
+                telegram_chat_id: document.getElementById('setting-telegram-chat-id')?.value ?? '',
+            };
+            const res = await this.fetchAPI('api/settings.php', {
+                method: 'POST',
+                body: JSON.stringify(payload)
+            });
+            if (res.success) {
+                this.showToast('✅ تم حفظ الإعدادات بنجاح');
+                const modalEl = document.getElementById('settingsModal');
+                if (modalEl) bootstrap.Modal.getInstance(modalEl)?.hide();
+            } else {
+                alert('خطأ في الحفظ: ' + (res.error || 'غير معروف'));
+            }
+        } catch (e) {
+            alert('خطأ في الاتصال: ' + e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-save me-1"></i>حفظ الإعدادات'; }
+        }
     }
 };
 
@@ -1694,7 +1942,13 @@ document.addEventListener('DOMContentLoaded', () => {
     window.app = app;
     window.toggleTheme = () => app.toggleTheme();
     app.init();
-    
+
+    // Pre-populate settings form every time the modal opens
+    const settingsModalEl = document.getElementById('settingsModal');
+    if (settingsModalEl) {
+        settingsModalEl.addEventListener('show.bs.modal', () => app.loadSettings());
+    }
+
     // Auto update paid amount when payment method changes
     const singlePm = document.getElementById('pos-payment-method');
     if (singlePm) {

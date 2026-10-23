@@ -78,6 +78,9 @@ if ($method === 'GET') {
     } else {
         if (!empty($data['name']) && is_numeric($data['price'])) {
             try {
+                $pdo->beginTransaction();
+
+                // 1. Insert the new product
                 $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location, bulk_unit_name, bulk_qty, bulk_barcode, bulk_price, is_liquid, ml_per_bottle, bottle_price, bottle_barcode, bottles_per_box, box_price_liquid, box_barcode_liquid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     empty($data['category_id']) ? null : $data['category_id'],
@@ -99,42 +102,57 @@ if ($method === 'GET') {
                     empty($data['box_price_liquid']) ? null : $data['box_price_liquid'],
                     empty($data['box_barcode_liquid']) ? null : $data['box_barcode_liquid']
                 ]);
-                
+
                 $newProductId = $pdo->lastInsertId();
 
-                // If purchase details are provided, record the initial purchase
-                if (isset($data['cost_price']) && is_numeric($data['cost_price'])) {
-                    $seller_id = empty($data['seller_id']) ? null : $data['seller_id'];
+                // 2. Optional: log the opening purchase and apply financials atomically
+                //    Triggered when cost_price is provided (user filled the purchase section).
+                if (isset($data['cost_price']) && is_numeric($data['cost_price']) && (float)$data['cost_price'] >= 0) {
+                    $seller_id    = empty($data['seller_id'])     ? null            : (int)$data['seller_id'];
                     $purchase_date = empty($data['purchase_date']) ? date('Y-m-d H:i:s') : $data['purchase_date'];
-                    $quantity = empty($data['stock_quantity']) ? 0 : $data['stock_quantity'];
-                    $paid_amount = empty($data['paid_amount']) ? 0 : (float)$data['paid_amount'];
-                    $note = empty($data['note']) ? null : $data['note'];
-                    
+                    $quantity     = (float)(empty($data['stock_quantity']) ? 0 : $data['stock_quantity']);
+                    $cost_price   = (float)$data['cost_price'];
+                    $paid_amount  = (float)(isset($data['paid_amount']) ? $data['paid_amount'] : 0);
+                    $note         = empty($data['note']) ? null : $data['note'];
+
                     if ($quantity > 0) {
-                        $purchaseStmt = $pdo->prepare("INSERT INTO product_purchases (product_id, seller_id, quantity, cost_price, paid_amount, note, purchase_date) VALUES (?, ?, ?, ?, ?, ?, ?)");
+                        // 2a. Log in product_purchases (same fields as purchases.php POST)
+                        $purchaseStmt = $pdo->prepare(
+                            "INSERT INTO product_purchases (product_id, seller_id, quantity, cost_price, paid_amount, note, purchase_date)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)"
+                        );
                         $purchaseStmt->execute([
-                            $newProductId,
-                            $seller_id,
-                            $quantity,
-                            $data['cost_price'],
-                            $paid_amount,
-                            $note,
-                            $purchase_date
+                            $newProductId, $seller_id, $quantity,
+                            $cost_price, $paid_amount, $note, $purchase_date
                         ]);
 
                         if ($seller_id) {
-                            $total_cost = (float)$quantity * (float)$data['cost_price'];
-                            $debt = $total_cost - $paid_amount;
+                            $total_cost = $quantity * $cost_price;
+                            $debt       = $total_cost - $paid_amount;
+
+                            // 2b. Update supplier debt for the unpaid portion (matches purchases.php)
                             if ($debt > 0) {
                                 $debtStmt = $pdo->prepare("UPDATE sellers SET total_debt = total_debt + ? WHERE id = ?");
                                 $debtStmt->execute([$debt, $seller_id]);
+                            }
+
+                            // 2c. Log the paid portion as a seller_payment (matches seller_payments.php POST)
+                            //     This keeps the supplier's payment ledger consistent with standalone purchases.
+                            if ($paid_amount > 0) {
+                                $payNote    = $note ?? ('دفعة افتتاحية لمنتج: ' . $data['name']);
+                                $payStmt    = $pdo->prepare(
+                                    "INSERT INTO seller_payments (seller_id, amount, note, payment_date) VALUES (?, ?, ?, ?)"
+                                );
+                                $payStmt->execute([$seller_id, $paid_amount, $payNote, $purchase_date]);
                             }
                         }
                     }
                 }
 
+                $pdo->commit();
                 echo json_encode(['success' => true, 'id' => $newProductId]);
             } catch (PDOException $e) {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 echo json_encode(['success' => false, 'error' => 'خطأ في قاعدة البيانات: ' . $e->getMessage()]);
             }
         } else {

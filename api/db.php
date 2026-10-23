@@ -51,6 +51,27 @@ try {
         }
     } catch (\PDOException $ignored) {
     }
+    // Settings key-value store
+    try {
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `settings` (
+                `setting_key`   VARCHAR(50)  NOT NULL PRIMARY KEY,
+                `setting_value` TEXT         NOT NULL DEFAULT ''
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ");
+        $defaults = [
+            'backup_interval'  => '43200',
+            'keep_local_days'  => '14',
+            'telegram_token'   => '',
+            'telegram_chat_id' => '',
+        ];
+        $ins = $pdo->prepare(
+            "INSERT IGNORE INTO `settings` (`setting_key`, `setting_value`) VALUES (:k, :v)"
+        );
+        foreach ($defaults as $k => $v) {
+            $ins->execute([':k' => $k, ':v' => $v]);
+        }
+    } catch (\PDOException $ignored) {}
 } catch (\PDOException $e) {
     // If DB doesn't exist, we connect to MySQL without DB selected to create it (used in setup.php)
     try {

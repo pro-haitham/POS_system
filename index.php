@@ -63,6 +63,7 @@
             <li data-target="seller-reports-section"><i class="fas fa-truck-loading"></i> الموردين والمشتريات</li>
             <li data-target="reports-section"><i class="fas fa-chart-bar"></i> التقارير والمبيعات</li>
             <li><a href="api/backup.php" target="_blank" style="color: inherit; text-decoration: none;"><i class="fas fa-file-invoice text-success"></i> تصدير الإيصالات</a></li>
+            <li data-bs-toggle="modal" data-bs-target="#settingsModal" style="cursor:pointer;"><i class="fas fa-cog"></i> الإعدادات</li>
         </ul>
         <div class="sidebar-footer p-3 mt-auto">
             <button type="button" class="btn btn-dark-mode w-100 d-flex align-items-center justify-content-center gap-2 py-2" id="theme-toggle-btn" onclick="toggleThemeMode()">
@@ -74,9 +75,16 @@
 
     <!-- Main Content -->
     <div class="main-content" id="main-content">
-        <!-- Sync Status -->
-        <div id="sync-status-badge" class="position-absolute" style="top: 15px; left: 15px; z-index: 1060;"></div>
-        
+        <!-- Sync Status — click badge to open diagnostics modal -->
+        <div class="position-absolute" style="top: 15px; left: 15px; z-index: 1060;">
+            <span id="sync-status-badge"
+                  data-bs-toggle="modal"
+                  data-bs-target="#syncDiagnosticModal"
+                  style="cursor: pointer;"
+                  title="انقر لعرض تشخيص المزامنة"></span>
+        </div>
+
+
         <!-- Toast Notification -->
         <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050">
             <div id="liveToast" class="toast align-items-center text-white bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
@@ -659,14 +667,22 @@
                 </div>
             </div>
 
-            <ul class="nav nav-pills mb-3" id="sellerReportsTab" role="tablist">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <ul class="nav nav-pills mb-0" id="sellerReportsTab" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="purchases-log-tab" data-bs-toggle="pill" data-bs-target="#purchases-log" type="button" role="tab"><i class="fas fa-shopping-cart"></i> سجل المشتريات</button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="payments-log-tab" data-bs-toggle="pill" data-bs-target="#payments-log" type="button" role="tab"><i class="fas fa-money-bill-wave"></i> سجل السداد</button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="balances-tab" data-bs-toggle="pill" data-bs-target="#balances-pane" type="button" role="tab" onclick="app.loadSellerBalances()"><i class="fas fa-balance-scale"></i> حسابات الموردين</button>
+                </li>
             </ul>
+                <button type="button" class="btn btn-primary shadow-sm" id="add-seller-btn" data-bs-toggle="modal" data-bs-target="#addSellerModal">
+                    <i class="fas fa-user-plus"></i> إضافة مورد جديد
+                </button>
+            </div>
             <div class="tab-content" id="sellerReportsTabContent">
                 <!-- Purchases Log -->
                 <div class="tab-pane fade show active" id="purchases-log" role="tabpanel">
@@ -711,6 +727,30 @@
                                         </tr>
                                     </thead>
                                     <tbody id="sr-payments-table">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Supplier Balances -->
+                <div class="tab-pane fade" id="balances-pane" role="tabpanel">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-hover align-middle mb-0">
+                                    <thead class="table-dark">
+                                        <tr class="text-center">
+                                            <th>#</th>
+                                            <th>اسم المورد</th>
+                                            <th>رقم الهاتف</th>
+                                            <th>الدين المتبقي</th>
+                                            <th>إجراءات</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="supplier-balances-table">
+                                        <tr><td colspan="5" class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i> جاري التحميل...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -1023,7 +1063,88 @@
         </div>
     </div>
 
+    <!-- Add Seller Modal -->
+    <div class="modal fade" id="addSellerModal" tabindex="-1" aria-labelledby="addSellerModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="add-seller-form" novalidate onsubmit="app.submitNewSeller(event)">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title" id="addSellerModalLabel"><i class="fas fa-user-plus"></i> إضافة مورد جديد</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="add-seller-name" class="form-label">اسم المورد <span class="text-danger">*</span></label>
+                            <input type="text" id="add-seller-name" name="name" class="form-control" placeholder="الاسم أو الشركة" maxlength="100" required>
+                            <div class="invalid-feedback">اسم المورد مطلوب</div>
+                        </div>
+                        <div class="mb-1">
+                            <label for="add-seller-phone" class="form-label">رقم الهاتف / التواصل</label>
+                            <input type="tel" id="add-seller-phone" name="phone" class="form-control" placeholder="اختياري" maxlength="50">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                        <button type="submit" class="btn btn-primary" id="add-seller-submit"><i class="fas fa-save"></i> حفظ المورد</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Statement Modal -->
+    <div class="modal fade" id="accountStatementModal" tabindex="-1" aria-labelledby="accountStatementModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="accountStatementModalLabel">
+                        <i class="fas fa-file-invoice"></i>
+                        كشف حساب المورد: <span id="stmt-seller-name"></span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Seller summary bar -->
+                    <div class="px-4 py-3 bg-light border-bottom d-flex flex-wrap gap-4 align-items-center">
+                        <div><span class="text-muted small">رقم الهاتف:</span> <strong id="stmt-seller-phone">-</strong></div>
+                        <div><span class="text-muted small">الدين الحالي:</span>
+                            <strong id="stmt-seller-debt" class="fs-5"></strong>
+                        </div>
+                        <div class="ms-auto">
+                            <button class="btn btn-danger btn-sm" id="stmt-pay-btn" onclick="app.openPaySellerFromStatement()">
+                                <i class="fas fa-hand-holding-usd"></i> تسديد دفعة
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Transaction table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0 text-center">
+                            <thead class="table-secondary sticky-top">
+                                <tr>
+                                    <th>\u0627\u0644\u062a\u0627\u0631\u064a\u062e</th>
+                                    <th>\u0627\u0644\u0646\u0648\u0639</th>
+                                    <th>\u0627\u0644\u0645\u0646\u062a\u062c</th>
+                                    <th>\u0627\u0644\u0643\u0645\u064a\u0629</th>
+                                    <th>\u0633\u0639\u0631 \u0627\u0644\u0648\u062d\u062f\u0629</th>
+                                    <th>\u0625\u062c\u0645\u0627\u0644\u064a \u0627\u0644\u0641\u0627\u062a\u0648\u0631\u0629</th>
+                                    <th>\u0627\u0644\u0645\u062f\u0641\u0648\u0639 \u0622\u0646\u064a\u0627\u064b</th>
+                                    <th>\u0627\u0644\u0645\u062f\u064a\u0648\u0646\u064a\u0629 \u0628\u0639\u062f \u0647\u0630\u0647 \u0627\u0644\u0639\u0645\u0644\u064a\u0629</th>
+                                    <th>\u0645\u0644\u0627\u062d\u0638\u0627\u062a</th>
+                                </tr>
+                            </thead>
+                            <tbody id="stmt-rows"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">\u0625\u063a\u0644\u0627\u0642</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Pay Seller Debt Modal -->
+
     <div class="modal fade" id="paySellerModal" tabindex="-1" aria-labelledby="paySellerModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
@@ -1177,7 +1298,138 @@
         </div>
     </div>
 
+    <!-- ── Settings Modal ──────────────────────────────────────────────────── -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-labelledby="settingsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="settingsModalLabel">
+                        <i class="fas fa-cog me-2"></i>الإعدادات
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="settings-form" novalidate>
+
+                        <!-- Backup Settings -->
+                        <h6 class="fw-bold border-bottom pb-2 mb-3">
+                            <i class="fas fa-database text-primary me-2"></i>إعدادات النسخ الاحتياطي
+                        </h6>
+
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">تكرار النسخ الاحتياطي</label>
+                                <select class="form-select" id="setting-backup-interval" name="backup_interval">
+                                    <option value="0">معطل</option>
+                                    <option value="21600">كل 6 ساعات</option>
+                                    <option value="43200">كل 12 ساعة</option>
+                                    <option value="86400">كل 24 ساعة</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">الاحتفاظ بالنسخ المحلية (أيام)</label>
+                                <input type="number" class="form-control" id="setting-keep-local-days"
+                                       name="keep_local_days" min="1" max="365" placeholder="14">
+                            </div>
+                        </div>
+
+                        <!-- Telegram Settings -->
+                        <h6 class="fw-bold border-bottom pb-2 mb-3">
+                            <i class="fab fa-telegram text-info me-2"></i>إعدادات تيليجرام (اختياري)
+                        </h6>
+
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Bot Token</label>
+                                <input type="text" class="form-control font-monospace" id="setting-telegram-token"
+                                       name="telegram_token" placeholder="123456:ABC-DEF..." dir="ltr" autocomplete="off">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label fw-semibold">Chat ID</label>
+                                <input type="text" class="form-control font-monospace" id="setting-telegram-chat-id"
+                                       name="telegram_chat_id" placeholder="-100123456789" dir="ltr" autocomplete="off">
+                                <div class="form-text">اتركهما فارغَين إذا لم تريد إرسال النسخ إلى تيليجرام.</div>
+                            </div>
+                        </div>
+
+                    </form>
+                </div>
+                <div class="modal-footer gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="button" class="btn btn-primary" id="settings-save-btn" onclick="app.saveSettings()">
+                        <i class="fas fa-save me-1"></i>حفظ الإعدادات
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Sync Diagnostic Modal ──────────────────────────────────────────── -->
+    <div class="modal fade" id="syncDiagnosticModal" tabindex="-1" aria-labelledby="syncDiagModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg">
+                <div class="modal-header bg-dark text-white">
+                    <h5 class="modal-title" id="syncDiagModalLabel">
+                        <i class="fas fa-satellite-dish me-2"></i>تشخيص المزامنة السحابية
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- Network Status -->
+                    <div class="d-flex align-items-center mb-3 p-3 rounded" id="diag-network-row"
+                         style="background: var(--bs-light, #f8f9fa);">
+                        <i class="fas fa-wifi fs-4 me-3" id="diag-network-icon"></i>
+                        <div>
+                            <div class="text-muted small">حالة الشبكة</div>
+                            <div class="fw-bold" id="diag-network-text">—</div>
+                        </div>
+                    </div>
+
+                    <!-- Last Successful Sync -->
+                    <div class="d-flex align-items-center mb-3 p-3 rounded"
+                         style="background: var(--bs-light, #f8f9fa);">
+                        <i class="fas fa-check-circle fs-4 text-success me-3"></i>
+                        <div>
+                            <div class="text-muted small">آخر مزامنة ناجحة</div>
+                            <div class="fw-bold" id="diag-last-success">لا توجد بيانات بعد</div>
+                        </div>
+                    </div>
+
+                    <!-- Last Error -->
+                    <div class="mb-3">
+                        <div class="text-muted small mb-1">
+                            <i class="fas fa-exclamation-triangle text-warning me-1"></i>تفاصيل آخر خطأ
+                        </div>
+                        <pre id="diag-last-error"
+                             class="bg-dark text-danger p-3 rounded small mb-0"
+                             style="white-space: pre-wrap; word-break: break-all; min-height: 60px; font-family: monospace; direction: ltr; text-align: left;">لا توجد أخطاء مسجّلة</pre>
+                    </div>
+
+                    <!-- Pending rows counter -->
+                    <div class="d-flex align-items-center p-3 rounded"
+                         style="background: var(--bs-light, #f8f9fa);">
+                        <i class="fas fa-database fs-4 text-secondary me-3"></i>
+                        <div>
+                            <div class="text-muted small">عنوان الخادم السحابي</div>
+                            <div class="fw-bold small text-break" id="diag-endpoint" dir="ltr">—</div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer gap-2">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="button" class="btn btn-primary" id="diag-test-btn"
+                            onclick="window.autoSync && window.autoSync.triggerManualFromModal()">
+                        <i class="fas fa-bolt me-1"></i>فحص الاتصال الآن
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="vendor/bootstrap.bundle.min.js"></script>
+
     <script src="vendor/jquery.min.js"></script>
     <script src="vendor/select2.min.js"></script>
     <script src="js/app.js?v=<?= time() ?>"></script>

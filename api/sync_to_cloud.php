@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 require 'db.php';
 header('Content-Type: application/json; charset=utf-8');
 
@@ -7,7 +7,7 @@ $secret_key = 'mock_secret_123'; // MOCK: replace with a strong random string fo
 
 // Don't try to reach the cloud until a real endpoint has been configured
 if (strpos($cloud_api_url, 'your-domain.com') !== false || $secret_key === 'YOUR_SECRET_SYNC_KEY') {
-    echo json_encode(['success' => false, 'configured' => false, 'error' => 'المزامنة السحابية غير مفعّلة: عدّل $cloud_api_url و $secret_key في api/sync_to_cloud.php']);
+    echo json_encode(['success' => false, 'configured' => false, 'error' => 'Ø§Ù„Ù…Ø²Ø§Ù…Ù†Ø© Ø§Ù„Ø³Ø­Ø§Ø¨ÙŠØ© ØºÙŠØ± Ù…ÙØ¹Ù‘Ù„Ø©: Ø¹Ø¯Ù‘Ù„ $cloud_api_url Ùˆ $secret_key ÙÙŠ api/sync_to_cloud.php']);
     exit;
 }
 
@@ -51,10 +51,24 @@ try {
     curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
     curl_setopt($ch, CURLOPT_TIMEOUT, 20);
     
-    $response = curl_exec($ch);
-    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $response  = curl_exec($ch);
+    $httpCode  = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlErrNo = curl_errno($ch);
     $curlError = curl_error($ch);
     curl_close($ch);
+
+    if ($curlErrNo !== 0) {
+        // Hard connection failure â€” return full diagnostic details
+        echo json_encode([
+            'success'   => false,
+            'error'     => "cURL Error {$curlErrNo}: {$curlError}",
+            'errno'     => $curlErrNo,
+            'curl_msg'  => $curlError,
+            'http_code' => $httpCode,
+            'endpoint'  => $cloud_api_url
+        ]);
+        exit;
+    }
 
     if ($httpCode === 200) {
         $result = json_decode($response, true);
@@ -75,10 +89,21 @@ try {
             
             echo json_encode(['success' => true, 'message' => 'Synced successfully']);
         } else {
-            echo json_encode(['success' => false, 'error' => 'Cloud rejected sync: ' . ($result['error'] ?? 'Unknown error')]);
+            echo json_encode([
+                'success'   => false,
+                'error'     => 'Cloud rejected sync: ' . ($result['error'] ?? 'Unknown error'),
+                'endpoint'  => $cloud_api_url
+            ]);
         }
     } else {
-        echo json_encode(['success' => false, 'error' => $curlError ? ('Connection error: ' . $curlError) : ('HTTP Error ' . $httpCode), 'response' => $response]);
+        // HTTP error (e.g. 404, 500, empty response)
+        echo json_encode([
+            'success'   => false,
+            'error'     => "HTTP Error {$httpCode}" . ($curlError ? " â€” {$curlError}" : ''),
+            'http_code' => $httpCode,
+            'endpoint'  => $cloud_api_url,
+            'response'  => $response
+        ]);
     }
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
@@ -87,3 +112,5 @@ try {
     echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
 ?>
+
+
