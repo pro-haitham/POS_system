@@ -55,8 +55,14 @@ if ($method === 'GET') {
         }
         try {
             $pdo->beginTransaction();
-            $stmt = $pdo->prepare("UPDATE products SET price = ?, stock_quantity = ? WHERE id = ?");
-            $stmt->execute([$data['price'], $data['stock'], $data['id']]);
+            if (array_key_exists('expiry_date', $data)) {
+                $expiry = trim((string)$data['expiry_date']) === '' ? null : $data['expiry_date'];
+                $stmt = $pdo->prepare("UPDATE products SET price = ?, stock_quantity = ?, expiry_date = ? WHERE id = ?");
+                $stmt->execute([$data['price'], $data['stock'], $expiry, $data['id']]);
+            } else {
+                $stmt = $pdo->prepare("UPDATE products SET price = ?, stock_quantity = ? WHERE id = ?");
+                $stmt->execute([$data['price'], $data['stock'], $data['id']]);
+            }
             $pdo->commit();
             echo json_encode(['success' => true]);
         } catch (Throwable $e) {
@@ -81,7 +87,7 @@ if ($method === 'GET') {
                 $pdo->beginTransaction();
 
                 // 1. Insert the new product
-                $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location, bulk_unit_name, bulk_qty, bulk_barcode, bulk_price, is_liquid, ml_per_bottle, bottle_price, bottle_barcode, bottles_per_box, box_price_liquid, box_barcode_liquid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt = $pdo->prepare("INSERT INTO products (category_id, serial_number, name, unit, price, stock_quantity, storage_location, bulk_unit_name, bulk_qty, bulk_barcode, bulk_price, is_liquid, ml_per_bottle, bottle_price, bottle_barcode, bottles_per_box, box_price_liquid, box_barcode_liquid, expiry_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                 $stmt->execute([
                     empty($data['category_id']) ? null : $data['category_id'],
                     (isset($data['serial_number']) && trim((string)$data['serial_number']) !== '') ? trim((string)$data['serial_number']) : null,
@@ -100,7 +106,8 @@ if ($method === 'GET') {
                     empty($data['bottle_barcode']) ? null : $data['bottle_barcode'],
                     empty($data['bottles_per_box']) ? 0 : $data['bottles_per_box'],
                     empty($data['box_price_liquid']) ? null : $data['box_price_liquid'],
-                    empty($data['box_barcode_liquid']) ? null : $data['box_barcode_liquid']
+                    empty($data['box_barcode_liquid']) ? null : $data['box_barcode_liquid'],
+                    (isset($data['expiry_date']) && trim((string)$data['expiry_date']) !== '') ? $data['expiry_date'] : null
                 ]);
 
                 $newProductId = $pdo->lastInsertId();

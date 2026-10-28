@@ -1,8 +1,8 @@
-﻿# PROJECT_CONTEXT.md — POS System: Complete Architectural Context
+# PROJECT_CONTEXT.md — POS System: Complete Architectural Context
 
 > **Purpose of this file:** Hand-off document for AI assistants continuing development on this system.
 > Every section is written to be maximally useful inside an AI context window.
-> Last updated: 2026-10-19 | Environment: XAMPP on Windows, PHP 8.2, MariaDB 10.x
+> Last updated: 2026-10-28 | Environment: XAMPP on Windows, PHP 8.2, MariaDB 10.x
 
 ---
 
@@ -105,6 +105,7 @@ unit               VARCHAR(50)  DEFAULT 'قطعة'
 price              DECIMAL(10,2)   -- sell price per base unit (per ML if liquid)
 stock_quantity     DECIMAL(10,2)   -- base unit count (ML for liquids)
 storage_location   VARCHAR(255)
+expiry_date        DATE NULL           -- optional product expiration date (Phase 22)
 bulk_unit_name     VARCHAR(50)     -- custom bulk name e.g. "كرتون"
 bulk_qty           INT DEFAULT 0   -- units per bulk pack
 bulk_barcode       VARCHAR(100)
@@ -224,6 +225,20 @@ name VARCHAR(100) NOT NULL
 uuid, is_synced, last_synced_at
 ```
 
+#### `settings` (Key-Value Store)
+```
+setting_key   VARCHAR(50) NOT NULL PRIMARY KEY
+setting_value TEXT        NOT NULL DEFAULT ''
+```
+> **No sync columns** — settings are local-only and are never pushed to the cloud.  
+> Auto-seeded by `api/db.php` on every connection with the following default keys:
+> | Key | Default | Purpose |
+> |---|---|---|
+> | `backup_interval` | `43200` | Auto-backup interval in seconds (12 h) |
+> | `keep_local_days` | `14` | Days to retain local backup files |
+> | `telegram_token` | `''` | Telegram Bot API token for backup delivery |
+> | `telegram_chat_id` | `''` | Telegram chat/channel ID for backup delivery |
+
 ---
 
 ## 4. Core Financial Workflows
@@ -317,22 +332,57 @@ Configure at top: `$cloud_api_url` and `$secret_key`
 - Currently mocked to `cloud_mock/receive_sync.php` (local loopback)
 - Sends: POST JSON `{"data": {tableName: [...rows with is_synced=0...]}}` + `X-POS-SYNC-KEY` header
 - On HTTP 200 + success: marks sent rows `is_synced=1, last_synced_at=NOW()` in transaction
+- On any non-200 response or cURL failure: returns `{success:false, error:"HTTP Error N"}` — the raw error body from the cloud receiver is included in the `response` field for diagnostics
 - Production receiver template: `cloud_api/receive_sync.php`
 
 Synced tables (10): categories, customers, products, sellers, bills, bill_items, payments, debt_payments, product_purchases, seller_payments
+
+### Sync Diagnostic Modal (`#syncDiagnosticModal`)
+A UI overlay (accessible by clicking the sync status badge in the header) showing:
+- Live network connectivity status
+- Timestamp of last successful sync in this session
+- **Last error details box** — displays the full error string, e.g. `HTTP Error 500` plus the JSON body returned by the receiver
+- **"فحص الاتصال الآن"** button — triggers an immediate `sync_to_cloud.php` call and refreshes the panel
+
+### cloud_mock/receive_sync.php — ID Collision Handling (Phase 22 fix)
+Previously, when the local `products` table had a row with an `id` that already belonged to a **different** uuid in the cloud mock DB (e.g. after a delete+recreate cycle), the receiver threw a `RuntimeException` and returned HTTP 500, which broke every subsequent sync.
+
+**Fixed behaviour:** when an incoming row's `id` belongs to a different uuid, the receiver now **silently drops `id`** from that row's payload and allows the cloud DB to auto-assign a new id. The upsert is keyed on `uuid` (the true cross-system identity), so the row is still matched and updated correctly.
+
+```php
+// Graceful ID-collision handling
+if (isset($row['id'])) {
+    $checkId->execute([$row['id']]);
+    $existingUuid = $checkId->fetchColumn();
+    if ($existingUuid !== false && $existingUuid !== $row['uuid']) {
+        unset($row['id']); // let cloud DB assign its own id
+    }
+}
+```
+
+> **Rule:** uuid is the canonical cross-system key. Never assume local `id` == cloud `id`.
 
 ---
 
 ## 7. Automated Backup System
 
 ### api/auto_backup.php
-- Interval: 43200s (12h) — checked via `backups/last_auto_backup.txt`
+- **Interval & retention now read from `settings` table** (keys `backup_interval` and `keep_local_days`), falling back to `43200` s / `14` days if not set. No longer hardcoded.
 - Override: `?force=1` bypasses interval
 - Command: `mysqldump -u root --routines --triggers --single-transaction pos_system`
 - Output: `backups/pos_system_YYYY-MM-DD_HH-mm.sql`
-- Retention: deletes files older than 14 days from backups/
-- Telegram: if configured, sends .sql as document via Bot API; records timestamp only on HTTP 200
-- Trigger (auto_sync.js): 10s after page load + every 30min, only when `navigator.onLine`
+- Retention: deletes files older than `keep_local_days` days from `backups/`
+- **Telegram delivery:** Bot token and chat ID are now **dynamically fetched from the `settings` table** (keys `telegram_token` and `telegram_chat_id`) on every backup run. Sending is skipped if either value is empty.
+- Trigger (`auto_sync.js`): 10 s after page load + every 30 min, only when `navigator.onLine`
+
+### System Settings UI (`الإعدادات` sidebar item)
+A Bootstrap modal (`#settingsModal`) lets the operator manage all runtime knobs without editing PHP files:
+- **Backup interval** — dropdown (1 h / 6 h / 12 h / 24 h)
+- **Local retention** — number input (days)
+- **Telegram Bot Token** — text input
+- **Telegram Chat ID** — text input
+
+Values are persisted via `api/settings.php` (GET/POST key-value pairs) into the `settings` table and are loaded from it on every backup run. Changes take effect on the **next** backup cycle — no server restart required.
 
 ---
 
@@ -351,6 +401,7 @@ Synced tables (10): categories, customers, products, sellers, bills, bill_items,
 | api/payments.php | GET, POST, DELETE | Customer debt payment log |
 | api/reports.php | GET | Sales analytics (date + method filters) |
 | api/categories.php | GET, POST, DELETE | Product categories |
+| api/settings.php | GET, POST | Key-value settings store (backup config, Telegram credentials) |
 | api/sync_to_cloud.php | GET | Cloud sync push |
 | api/auto_backup.php | GET | Timed backup (?force=1) |
 | api/backup.php | GET | Manual backup management |

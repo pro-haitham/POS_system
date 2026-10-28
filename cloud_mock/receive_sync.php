@@ -110,13 +110,14 @@ try {
                 $row['last_synced_at'] = date('Y-m-d H:i:s');
             }
 
-            // Guard against a primary-key clash with a *different* record
-            // (the upsert is keyed on uuid, so it would silently overwrite it).
+            // Primary-key clash with a *different* record (e.g. a row deleted and
+            // re-created locally). uuid is the cross-system identity, so drop the
+            // local id and let the cloud keep/assign its own id instead of failing.
             if (isset($row['id'])) {
                 $checkId->execute([$row['id']]);
                 $existingUuid = $checkId->fetchColumn();
                 if ($existingUuid !== false && $existingUuid !== $row['uuid']) {
-                    throw new RuntimeException("ID conflict in `$table`: id {$row['id']} belongs to another uuid");
+                    unset($row['id']);
                 }
             }
 

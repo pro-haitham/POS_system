@@ -22,6 +22,10 @@ try {
     } catch (\PDOException $ignored) {
         // Column already exists or table not created yet
     }
+    // Ensure expiry_date column exists in products table
+    try {
+        $pdo->exec("ALTER TABLE products ADD COLUMN expiry_date DATE NULL AFTER stock_quantity");
+    } catch (\PDOException $ignored) {}
     // Ensure bills table supports split payment methods
     try {
         $pdo->exec("ALTER TABLE `bills` MODIFY COLUMN `payment_method` VARCHAR(50) NOT NULL DEFAULT 'cash'");

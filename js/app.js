@@ -233,6 +233,15 @@ const app = {
         });
     },
 
+    // Returns { text, cls } for an expiry date; cls is 'text-danger fw-bold' if expired or within 30 days
+    expiryInfo(dateStr) {
+        if (!dateStr) return { text: '-', cls: 'text-muted' };
+        const d = new Date(dateStr + 'T00:00:00');
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const days = Math.round((d - today) / 86400000);
+        return { text: dateStr, cls: days <= 30 ? 'text-danger fw-bold' : '' };
+    },
+
     renderProductsTable() {
         const tbody = document.getElementById('products-table');
         tbody.innerHTML = '';
@@ -244,8 +253,9 @@ const app = {
                     <td>${p.category_name || '-'}</td>
                     <td>${p.unit}</td>
                     <td>${p.storage_location || '-'}</td>
-                    <td><input type="number" step="any" class="form-control form-control-sm w-75" id="list_stock_${p.id}" value="${p.stock_quantity}" min="0"></td>
-                    <td><input type="number" step="0.01" class="form-control form-control-sm w-75" id="list_price_${p.id}" value="${p.price}" min="0"></td>
+                    <td><input type="number" step="any" class="form-control form-control-sm w-75" id="list_stock_${p.id}" aria-label="المخزون" value="${p.stock_quantity}" min="0"></td>
+                    <td><input type="date" class="form-control form-control-sm ${this.expiryInfo(p.expiry_date).cls}" id="list_expiry_${p.id}" aria-label="تاريخ الصلاحية" value="${p.expiry_date || ''}"></td>
+                    <td><input type="number" step="0.01" class="form-control form-control-sm w-75" id="list_price_${p.id}" aria-label="السعر" value="${p.price}" min="0"></td>
                     <td style="min-width: 140px;">
                         <button class="btn btn-sm btn-success mb-1" title="توريد (إضافة مخزون)" onclick="app.openRestockModal(${p.id}, '${p.name.replace(/'/g, "\\'")}')"><i class="fas fa-truck-loading"></i> توريد</button>
                         <button class="btn btn-sm btn-primary mb-1" onclick="app.updateProductQuick(${p.id})">حفظ</button>
@@ -275,6 +285,7 @@ const app = {
             unit: isLiquid ? 'مل' : unitVal,
             price: isLiquid ? document.getElementById('prod-liquid-ml-price').value : document.getElementById('prod-price').value,
             stock_quantity: document.getElementById('prod-stock').value,
+            expiry_date: document.getElementById('product-expiry') ? document.getElementById('product-expiry').value : '',
             location: document.getElementById('prod-location').value,
             seller_id: document.getElementById('prod-seller') ? document.getElementById('prod-seller').value : '',
             cost_price: document.getElementById('prod-cost-price') ? document.getElementById('prod-cost-price').value : '',
@@ -343,10 +354,12 @@ const app = {
     async updateProductQuick(id) {
         const price = document.getElementById(`list_price_${id}`).value;
         const stock = document.getElementById(`list_stock_${id}`).value;
+        const expiryEl = document.getElementById(`list_expiry_${id}`);
+        const expiry_date = expiryEl ? expiryEl.value : '';
         
         if (parseFloat(price) < 0 || parseFloat(stock) < 0) return alert('القيم لا يمكن أن تكون بالسالب');
 
-        const res = await this.fetchAPI('api/products.php', { method: 'POST', body: JSON.stringify({ action: 'update_price_stock', id, price, stock }) });
+        const res = await this.fetchAPI('api/products.php', { method: 'POST', body: JSON.stringify({ action: 'update_price_stock', id, price, stock, expiry_date }) });
         
         if(res.success) {
             this.showToast('تم تحديث البيانات بنجاح');
@@ -839,15 +852,16 @@ const app = {
                     <td class="fw-bold">${p.name}</td>
                     <td>${p.category_name || '-'}</td>
                     <td>${p.unit}</td>
-                    <td><input type="text" class="form-control form-control-sm text-center" id="inv_loc_${p.id}" value="${p.storage_location || ''}" placeholder="مكان التخزين"></td>
+                    <td><input type="text" class="form-control form-control-sm text-center" id="inv_loc_${p.id}" aria-label="مكان التخزين" autocomplete="off" value="${p.storage_location || ''}" placeholder="مكان التخزين"></td>
                     <td>
                         <span class="badge ${isLowStock ? 'bg-danger' : 'bg-success'} fs-6" style="line-height: 1.5;">
                             ${stockDisplay}
                         </span>
                     </td>
+                    <td class="${this.expiryInfo(p.expiry_date).cls}">${this.expiryInfo(p.expiry_date).text}</td>
                     <td>
                         <div class="input-group input-group-sm w-75 mx-auto mb-1">
-                            <input type="number" class="form-control text-center" id="stock_${p.id}" value="${p.stock_quantity}" min="0" step="any">
+                            <input type="number" class="form-control text-center" id="stock_${p.id}" aria-label="تحديث المخزون" value="${p.stock_quantity}" min="0" step="any">
                             <button class="btn btn-primary" onclick="app.updateStock(${p.id})">حفظ</button>
                         </div>
                         <button class="btn btn-sm btn-outline-info w-75" onclick="app.showProductPurchases(${p.id})">

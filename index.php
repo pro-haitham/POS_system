@@ -103,7 +103,7 @@
                 <!-- Products List -->
                 <div class="col-md-8 h-100 d-flex flex-column">
                     <div class="search-bar mb-3">
-                        <input type="text" id="pos-search" class="form-control" placeholder="ابحث عن منتج (بالاسم أو الباركود)..." autofocus>
+                        <input type="text" id="pos-search" class="form-control" placeholder="ابحث عن منتج (بالاسم أو الباركود)..." autofocus aria-label="ابحث عن منتج (بالاسم أو الباركود)..." autocomplete="off">
                     </div>
                     <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-3 flex-grow-1 overflow-auto" id="pos-products-grid">
                         <!-- Products will be loaded here -->
@@ -118,13 +118,13 @@
                         <div class="card-body d-flex flex-column">
                             <div class="mb-2">
                                 <label>اسم الكاشير:</label>
-                                <input type="text" id="pos-cashier" class="form-control form-control-sm" value="كاشير 1">
+                                <input type="text" id="pos-cashier" class="form-control form-control-sm" value="كاشير 1" aria-label="اسم الكاشير" autocomplete="off">
                             </div>
                             <div class="mb-2">
                                 <label>العميل:</label>
                                 <div class="d-flex gap-1 w-100">
                                     <div class="flex-grow-1">
-                                        <select id="pos-customer" class="form-select form-select-sm"></select>
+                                        <select id="pos-customer" class="form-select form-select-sm" aria-label="العميل"></select>
                                     </div>
                                     <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#addCustomerOffcanvas">
                                         <i class="fas fa-user-plus"></i>
@@ -160,7 +160,7 @@
                                     <div class="row g-2 mb-2">
                                         <div class="col-6">
                                             <label class="small">نوع الدفع:</label>
-                                            <select id="pos-payment-method" class="form-select" onchange="app.renderCart()">
+                                            <select id="pos-payment-method" class="form-select" onchange="app.renderCart()" aria-label="نوع الدفع">
                                                 <option value="cash">كاش (نقدي)</option>
                                                 <option value="card">بطاقة (شبكة)</option>
                                                 <option value="jeeb">جيب</option>
@@ -173,7 +173,7 @@
                                         </div>
                                         <div class="col-6">
                                             <label class="small">المبلغ المدفوع:</label>
-                                            <input type="number" id="pos-paid-amount" class="form-control" value="0" step="any">
+                                            <input type="number" id="pos-paid-amount" class="form-control" value="0" step="any" aria-label="المبلغ المدفوع">
                                         </div>
                                     </div>
                                 </div>
@@ -183,7 +183,7 @@
                                     <div class="row g-2 mb-2">
                                         <div class="col-6">
                                             <label class="small fw-bold text-success">طريقة الدفع 1:</label>
-                                            <select id="pos-split-method-1" class="form-select form-select-sm" onchange="app.updateSplitTotalIndicator()">
+                                            <select id="pos-split-method-1" class="form-select form-select-sm" onchange="app.updateSplitTotalIndicator()" aria-label="طريقة الدفع 1">
                                                 <option value="cash">كاش (نقدي)</option>
                                                 <option value="card">بطاقة (شبكة)</option>
                                                 <option value="jeeb">جيب</option>
@@ -196,13 +196,13 @@
                                         </div>
                                         <div class="col-6">
                                             <label class="small fw-bold text-success">المبلغ 1:</label>
-                                            <input type="number" id="pos-split-amount-1" class="form-control form-control-sm" value="0" step="any" oninput="app.calculateSplitRemainder()">
+                                            <input type="number" id="pos-split-amount-1" class="form-control form-control-sm" value="0" step="any" oninput="app.calculateSplitRemainder()" aria-label="المبلغ 1">
                                         </div>
                                     </div>
                                     <div class="row g-2 mb-1">
                                         <div class="col-6">
                                             <label class="small fw-bold text-primary">طريقة الدفع 2:</label>
-                                            <select id="pos-split-method-2" class="form-select form-select-sm" onchange="app.updateSplitTotalIndicator()">
+                                            <select id="pos-split-method-2" class="form-select form-select-sm" onchange="app.updateSplitTotalIndicator()" aria-label="طريقة الدفع 2">
                                                 <option value="deposit">آجل (دين)</option>
                                                 <option value="kuraimi">كريمي</option>
                                                 <option value="card">بطاقة (شبكة)</option>
@@ -215,7 +215,7 @@
                                         </div>
                                         <div class="col-6">
                                             <label class="small fw-bold text-primary">المبلغ 2:</label>
-                                            <input type="number" id="pos-split-amount-2" class="form-control form-control-sm" value="0" step="any" oninput="app.updateSplitTotalIndicator()">
+                                            <input type="number" id="pos-split-amount-2" class="form-control form-control-sm" value="0" step="any" oninput="app.updateSplitTotalIndicator()" aria-label="المبلغ 2">
                                         </div>
                                     </div>
                                     <div class="small text-muted text-center mt-1">
@@ -240,7 +240,7 @@
                     <div class="card mb-4">
                         <div class="card-header">إضافة قسم جديد</div>
                         <div class="card-body">
-                            <input type="text" id="cat-name" class="form-control mb-2" placeholder="اسم القسم">
+                            <input type="text" id="cat-name" class="form-control mb-2" placeholder="اسم القسم" aria-label="اسم القسم" autocomplete="off">
                             <button class="btn btn-primary w-100" onclick="app.addCategory()">إضافة</button>
                             <hr>
                             <ul class="list-group" id="categories-list"></ul>
@@ -254,34 +254,38 @@
                         <div class="card-body">
                             <div class="row g-2">
                                 <div class="col-md-6">
-                                    <input type="text" id="prod-name" class="form-control" placeholder="اسم المنتج">
+                                    <input type="text" id="prod-name" class="form-control" placeholder="اسم المنتج" aria-label="اسم المنتج" autocomplete="off">
                                 </div>
                                 <div class="col-md-6">
-                                    <input type="text" id="prod-serial" class="form-control" placeholder="رقم الباركود / السيريال">
+                                    <input type="text" id="prod-serial" class="form-control" placeholder="رقم الباركود / السيريال" aria-label="رقم الباركود / السيريال" autocomplete="off">
                                 </div>
                                 <div class="col-md-4">
-                                    <select id="prod-category" class="form-select"></select>
+                                    <select id="prod-category" class="form-select" aria-label="القسم"></select>
                                 </div>
                                 <div class="col-md-4 d-flex gap-2">
-                                    <select id="prod-unit-select" class="form-select" onchange="if(this.value==='other'){document.getElementById('prod-unit-other').classList.remove('d-none');}else{document.getElementById('prod-unit-other').classList.add('d-none');}">
+                                    <select id="prod-unit-select" class="form-select" onchange="if(this.value==='other'){document.getElementById('prod-unit-other').classList.remove('d-none');}else{document.getElementById('prod-unit-other').classList.add('d-none');}" aria-label="الوحدة">
                                         <option value="قطعة">قطعة</option>
                                         <option value="مل">مل</option>
                                         <option value="كرتونة">كرتونة</option>
                                         <option value="other">أخرى...</option>
                                     </select>
-                                    <input type="text" id="prod-unit-other" class="form-control d-none" placeholder="اكتب الوحدة">
+                                    <input type="text" id="prod-unit-other" class="form-control d-none" placeholder="اكتب الوحدة" aria-label="اكتب الوحدة" autocomplete="off">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="small text-muted">سعر البيع:</label>
-                                    <input type="number" id="prod-price" class="form-control" placeholder="سعر البيع" min="0" step="0.01">
+                                    <input type="number" id="prod-price" class="form-control" placeholder="سعر البيع" min="0" step="0.01" aria-label="سعر البيع">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted">مكان التخزين:</label>
-                                    <input type="text" id="prod-location" class="form-control" placeholder="الرف/المستودع">
+                                    <input type="text" id="prod-location" class="form-control" placeholder="الرف/المستودع" aria-label="الرف/المستودع" autocomplete="off">
                                 </div>
                                 <div class="col-md-2">
                                     <label class="small text-muted">الكمية الافتتاحية:</label>
-                                    <input type="number" id="prod-stock" class="form-control" placeholder="الكمية" min="0" step="any" oninput="app.calcAddProductDebt()">
+                                    <input type="number" id="prod-stock" class="form-control" placeholder="الكمية" min="0" step="any" oninput="app.calcAddProductDebt()" aria-label="الكمية">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="small text-muted" for="product-expiry">تاريخ الصلاحية (اختياري):</label>
+                                    <input type="date" id="product-expiry" class="form-control">
                                 </div>
                                 
                                 <!-- Bulk Packaging Details -->
@@ -297,7 +301,7 @@
                                                 <div class="row g-2 align-items-end">
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">اسم التعبئة الكبرى:</label>
-                                                        <select id="prod-bulk-name" class="form-select">
+                                                        <select id="prod-bulk-name" class="form-select" aria-label="اسم التعبئة الكبرى">
                                                             <option value="">بدون تعبئة كبرى</option>
                                                             <option value="كرتونة">كرتونة</option>
                                                             <option value="علبة">علبة</option>
@@ -306,15 +310,15 @@
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">عدد القطع بداخلها:</label>
-                                                        <input type="number" id="prod-bulk-qty" class="form-control" placeholder="مثال: 24" min="0">
+                                                        <input type="number" id="prod-bulk-qty" class="form-control" placeholder="مثال: 24" min="0" aria-label="مثال: 24">
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">باركود التعبئة الكبرى:</label>
-                                                        <input type="text" id="prod-bulk-barcode" class="form-control" placeholder="اختياري">
+                                                        <input type="text" id="prod-bulk-barcode" class="form-control" placeholder="اختياري" aria-label="اختياري" autocomplete="off">
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">سعر بيع التعبئة الكبرى:</label>
-                                                        <input type="number" id="prod-bulk-price" class="form-control" placeholder="السعر" min="0" step="0.01">
+                                                        <input type="number" id="prod-bulk-price" class="form-control" placeholder="السعر" min="0" step="0.01" aria-label="السعر">
                                                     </div>
                                                 </div>
                                             </div>
@@ -335,33 +339,33 @@
                                                     <input type="hidden" id="prod-is-liquid" value="0">
                                                     <div class="col-md-2">
                                                         <label class="small text-muted">سعة العبوة (مل):</label>
-                                                        <input type="number" id="prod-liquid-ml" class="form-control border-info" placeholder="مثال: 60" min="0">
+                                                        <input type="number" id="prod-liquid-ml" class="form-control border-info" placeholder="مثال: 60" min="0" aria-label="مثال: 60">
                                                     </div>
                                                     <div class="col-md-2">
                                                         <label class="small text-muted">سعر العبوة كاملة:</label>
-                                                        <input type="number" id="prod-liquid-bottle-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01">
+                                                        <input type="number" id="prod-liquid-bottle-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01" aria-label="السعر">
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">باركود العبوة:</label>
-                                                        <input type="text" id="prod-liquid-bottle-barcode" class="form-control border-info" placeholder="اختياري">
+                                                        <input type="text" id="prod-liquid-bottle-barcode" class="form-control border-info" placeholder="اختياري" aria-label="اختياري" autocomplete="off">
                                                     </div>
                                                     <div class="col-md-2">
                                                         <label class="small text-muted">سعر بيع 1 ملي:</label>
-                                                        <input type="number" id="prod-liquid-ml-price" class="form-control border-info" placeholder="سعر الملي" min="0" step="0.01">
+                                                        <input type="number" id="prod-liquid-ml-price" class="form-control border-info" placeholder="سعر الملي" min="0" step="0.01" aria-label="سعر الملي">
                                                     </div>
                                                 </div>
                                                 <div class="row g-2 align-items-end mt-2">
                                                     <div class="col-md-2">
                                                         <label class="small text-muted">عبوات في الكرتون:</label>
-                                                        <input type="number" id="prod-liquid-box-qty" class="form-control border-info" placeholder="العدد" min="0">
+                                                        <input type="number" id="prod-liquid-box-qty" class="form-control border-info" placeholder="العدد" min="0" aria-label="العدد">
                                                     </div>
                                                     <div class="col-md-2">
                                                         <label class="small text-muted">سعر الكرتون:</label>
-                                                        <input type="number" id="prod-liquid-box-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01">
+                                                        <input type="number" id="prod-liquid-box-price" class="form-control border-info" placeholder="السعر" min="0" step="0.01" aria-label="السعر">
                                                     </div>
                                                     <div class="col-md-3">
                                                         <label class="small text-muted">باركود الكرتون:</label>
-                                                        <input type="text" id="prod-liquid-box-barcode" class="form-control border-info" placeholder="اختياري">
+                                                        <input type="text" id="prod-liquid-box-barcode" class="form-control border-info" placeholder="اختياري" aria-label="اختياري" autocomplete="off">
                                                     </div>
                                                 </div>
                                             </div>
@@ -376,7 +380,7 @@
                                 <div class="col-md-3">
                                     <label class="small text-muted">المورد / البائع:</label>
                                     <div class="d-flex gap-1">
-                                        <select id="prod-seller" class="form-select" onchange="app.calcAddProductDebt()"></select>
+                                        <select id="prod-seller" class="form-select" onchange="app.calcAddProductDebt()" aria-label="المورد"></select>
                                         <button class="btn btn-outline-secondary" type="button" data-bs-toggle="offcanvas" data-bs-target="#sellersOffcanvas">
                                             <i class="fas fa-plus"></i>
                                         </button>
@@ -384,19 +388,19 @@
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted">سعر التكلفة (الوحدة):</label>
-                                    <input type="number" id="prod-cost-price" class="form-control" placeholder="تكلفة الوحدة" min="0" step="0.01" oninput="app.calcAddProductDebt()">
+                                    <input type="number" id="prod-cost-price" class="form-control" placeholder="تكلفة الوحدة" min="0" step="0.01" oninput="app.calcAddProductDebt()" aria-label="تكلفة الوحدة">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted">المبلغ المدفوع:</label>
-                                    <input type="number" id="prod-paid-amount" class="form-control" placeholder="المدفوع للمورد" min="0" step="0.01" oninput="app.calcAddProductDebt()">
+                                    <input type="number" id="prod-paid-amount" class="form-control" placeholder="المدفوع للمورد" min="0" step="0.01" oninput="app.calcAddProductDebt()" aria-label="المدفوع للمورد">
                                 </div>
                                 <div class="col-md-3">
                                     <label class="small text-muted">تاريخ الشراء:</label>
-                                    <input type="date" id="prod-purchase-date" class="form-control">
+                                    <input type="date" id="prod-purchase-date" class="form-control" aria-label="تاريخ الشراء">
                                 </div>
                                 <div class="col-md-12 mt-2">
                                     <label class="small text-muted">ملاحظة / بيان الشراء (اختياري):</label>
-                                    <input type="text" id="prod-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234، أو ملاحظات أخرى...">
+                                    <input type="text" id="prod-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234، أو ملاحظات أخرى..." aria-label="مثال: فاتورة رقم 1234، أو ملاحظات أخرى..." autocomplete="off">
                                 </div>
                                 <div class="col-12 mt-1 small">
                                     <span class="text-muted">الإجمالي: <span id="prod-total-cost" class="fw-bold">0.00</span></span> | 
@@ -422,6 +426,7 @@
                                         <th>الوحدة</th>
                                         <th>التخزين</th>
                                         <th>المخزون</th>
+                                        <th>تاريخ الصلاحية</th>
                                         <th>السعر</th>
                                         <th>إجراءات</th>
                                     </tr>
@@ -442,7 +447,7 @@
             <div class="card">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0">قائمة المخزون الحالي</h5>
-                    <input type="text" id="inventory-search" class="form-control form-control-sm w-25" placeholder="بحث...">
+                    <input type="text" id="inventory-search" class="form-control form-control-sm w-25" placeholder="بحث..." aria-label="بحث..." autocomplete="off">
                 </div>
                 <div class="card-body">
                     <table class="table table-hover table-bordered text-center align-middle">
@@ -454,6 +459,7 @@
                                 <th>الوحدة</th>
                                         <th>مكان التخزين</th>
                                 <th>المخزون المتوفر</th>
+                                <th>تاريخ الصلاحية</th>
                                 <th>تحديث المخزون</th>
                             </tr>
                         </thead>
@@ -517,22 +523,22 @@
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted">اختر العميل:</label>
-                                <select id="payment-customer" class="form-select"></select>
+                                <select id="payment-customer" class="form-select" aria-label="اختر العميل"></select>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted" id="pay-amount-label">المبلغ المدفوع (ريال):</label>
-                                <input type="number" id="payment-amount" class="form-control" placeholder="0.00" min="0.01" step="any">
+                                <input type="number" id="payment-amount" class="form-control" placeholder="0.00" min="0.01" step="any" aria-label="0.00">
                             </div>
 
                             <div class="mb-3" id="payment-items-container" style="display: none;">
                                 <label class="form-label small fw-bold text-muted">الأصناف / المشتريات المأخوذة في هذا الدين:</label>
-                                <textarea id="payment-items-details" class="form-control form-control-sm" rows="2" placeholder="اكتب تفاصيل الأصناف المشتراة (مثال: 2 كرتونة ماء، 3 باكت بسكويت...)"></textarea>
+                                <textarea id="payment-items-details" class="form-control form-control-sm" rows="2" placeholder="اكتب تفاصيل الأصناف المشتراة (مثال: 2 كرتونة ماء، 3 باكت بسكويت...)" aria-label="اكتب تفاصيل الأصناف المشتراة (مثال: 2 كرتونة ماء، 3 باكت بسكويت...)"></textarea>
                             </div>
 
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted">البيان / ملاحظة (اختياري):</label>
-                                <input type="text" id="payment-note" class="form-control" placeholder="مثال: سداد نقدي، دفعة حساب...">
+                                <input type="text" id="payment-note" class="form-control" placeholder="مثال: سداد نقدي، دفعة حساب..." aria-label="مثال: سداد نقدي، دفعة حساب..." autocomplete="off">
                             </div>
 
                             <button class="btn btn-success w-100 py-2 fw-bold" id="btn-debt-submit" onclick="app.executeDebtAction()">
@@ -549,11 +555,11 @@
                         <div class="card-body">
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted">اسم العميل:</label>
-                                <input type="text" id="cust-name" class="form-control" placeholder="الاسم الكامل">
+                                <input type="text" id="cust-name" class="form-control" placeholder="الاسم الكامل" aria-label="الاسم الكامل" autocomplete="off">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label small fw-bold text-muted">رقم الهاتف:</label>
-                                <input type="text" id="cust-phone" class="form-control" dir="ltr" placeholder="05XXXXXXXX">
+                                <input type="text" id="cust-phone" class="form-control" dir="ltr" placeholder="05XXXXXXXX" aria-label="05XXXXXXXX" autocomplete="off">
                             </div>
                             <button class="btn btn-primary w-100 py-2" onclick="app.addCustomer()">
                                 <i class="fas fa-user-check"></i> حفظ العميل
@@ -567,7 +573,7 @@
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <h5 class="mb-0 fw-bold"><i class="fas fa-users text-primary"></i> قائمة العملاء والديون</h5>
-                            <input type="text" id="cust-search" class="form-control form-control-sm w-auto" placeholder="بحث باسم العميل أو الهاتف..." oninput="app.filterCustomersTable(this.value)">
+                            <input type="text" id="cust-search" class="form-control form-control-sm w-auto" placeholder="بحث باسم العميل أو الهاتف..." oninput="app.filterCustomersTable(this.value)" aria-label="بحث باسم العميل أو الهاتف..." autocomplete="off">
                         </div>
                         <div class="card-body p-0">
                             <div class="table-responsive">
@@ -776,11 +782,11 @@
                     <div class="row g-3 align-items-end">
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted">تحديد التاريخ:</label>
-                            <input type="date" id="report-date" class="form-control" onchange="app.loadReports()">
+                            <input type="date" id="report-date" class="form-control" onchange="app.loadReports()" aria-label="تحديد التاريخ">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-bold text-muted">طريقة الدفع:</label>
-                            <select id="report-payment-method" class="form-select" onchange="app.loadReports()">
+                            <select id="report-payment-method" class="form-select" onchange="app.loadReports()" aria-label="طريقة الدفع">
                                 <option value="all">جميع الطرق</option>
                                 <option value="cash">كاش (نقدي)</option>
                                 <option value="card">بطاقة (شبكة)</option>
@@ -794,7 +800,7 @@
                         </div>
                         <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted">ترتيب النتائج:</label>
-                            <select id="report-sort" class="form-select" onchange="app.loadReports()">
+                            <select id="report-sort" class="form-select" onchange="app.loadReports()" aria-label="ترتيب النتائج">
                                 <option value="time_desc">الأحدث أولاً (الوقت)</option>
                                 <option value="time_asc">الأقدم أولاً (الوقت)</option>
                                 <option value="amount_desc">الأعلى قيمة</option>
@@ -805,7 +811,7 @@
                         </div>
                         <div class="col-md-2">
                             <label class="form-label small fw-bold text-muted">اسم الكاشير:</label>
-                            <input type="text" id="report-cashier" class="form-control" placeholder="بحث بالكاشير..." onkeyup="if(event.key==='Enter') app.loadReports()">
+                            <input type="text" id="report-cashier" class="form-control" placeholder="بحث بالكاشير..." onkeyup="if(event.key==='Enter') app.loadReports()" aria-label="بحث بالكاشير..." autocomplete="off">
                         </div>
                         <div class="col-md-2">
                             <button class="btn btn-primary w-100" onclick="app.loadReports()"><i class="fas fa-search"></i> بحث وتصفية</button>
@@ -971,11 +977,11 @@
         <div class="offcanvas-body">
             <div class="mb-3">
                 <label class="form-label">اسم العميل</label>
-                <input type="text" id="quick-cust-name" class="form-control" placeholder="الاسم الكامل">
+                <input type="text" id="quick-cust-name" class="form-control" placeholder="الاسم الكامل" aria-label="الاسم الكامل" autocomplete="off">
             </div>
             <div class="mb-3">
                 <label class="form-label">رقم الهاتف</label>
-                <input type="text" id="quick-cust-phone" class="form-control" dir="ltr" placeholder="05XXXXXXXX">
+                <input type="text" id="quick-cust-phone" class="form-control" dir="ltr" placeholder="05XXXXXXXX" aria-label="05XXXXXXXX" autocomplete="off">
             </div>
             <button class="btn btn-primary w-100" onclick="app.quickAddCustomer()">إضافة العميل وتحديده</button>
         </div>
@@ -993,25 +999,25 @@
                     <input type="hidden" id="restock-product-id">
                     <div class="mb-3">
                         <label class="form-label">المنتج:</label>
-                        <input type="text" id="restock-product-name" class="form-control" readonly disabled>
+                        <input type="text" id="restock-product-name" class="form-control" readonly disabled aria-label="المنتج" autocomplete="off">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">المورد / البائع:</label>
-                        <select id="restock-seller" class="form-select"></select>
+                        <select id="restock-seller" class="form-select" aria-label="المورد / البائع"></select>
                     </div>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label">الكمية المشتراة:</label>
-                            <input type="number" id="restock-quantity" class="form-control" min="0.01" step="any" required oninput="app.calcRestockDebt()">
+                            <input type="number" id="restock-quantity" class="form-control" min="0.01" step="any" required oninput="app.calcRestockDebt()" aria-label="الكمية المشتراة">
                         </div>
                         <div class="col-6">
                             <label class="form-label">سعر التكلفة للوحدة:</label>
-                            <input type="number" id="restock-cost" class="form-control" min="0" step="0.01" required oninput="app.calcRestockDebt()">
+                            <input type="number" id="restock-cost" class="form-control" min="0" step="0.01" required oninput="app.calcRestockDebt()" aria-label="سعر التكلفة للوحدة">
                         </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">المبلغ المدفوع للمورد:</label>
-                        <input type="number" id="restock-paid-amount" class="form-control" min="0" step="0.01" oninput="app.calcRestockDebt()">
+                        <input type="number" id="restock-paid-amount" class="form-control" min="0" step="0.01" oninput="app.calcRestockDebt()" aria-label="المبلغ المدفوع للمورد">
                     </div>
                     <div class="mb-3 small bg-light p-2 rounded">
                         <span class="text-muted">الإجمالي: <span id="restock-total-cost" class="fw-bold">0.00</span></span> | 
@@ -1019,11 +1025,11 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">تاريخ الشراء:</label>
-                        <input type="date" id="restock-date" class="form-control">
+                        <input type="date" id="restock-date" class="form-control" aria-label="تاريخ الشراء">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظة / بيان الفاتورة (اختياري):</label>
-                        <input type="text" id="restock-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234...">
+                        <input type="text" id="restock-purchase-note" class="form-control" placeholder="مثال: فاتورة رقم 1234..." aria-label="مثال: فاتورة رقم 1234..." autocomplete="off">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1046,11 +1052,11 @@
                 <div class="card-body">
                     <div class="mb-2">
                         <label class="form-label small">اسم المورد:</label>
-                        <input type="text" id="new-seller-name" class="form-control form-control-sm" placeholder="الاسم أو الشركة">
+                        <input type="text" id="new-seller-name" class="form-control form-control-sm" placeholder="الاسم أو الشركة" aria-label="الاسم أو الشركة" autocomplete="off">
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">رقم الهاتف:</label>
-                        <input type="text" id="new-seller-phone" class="form-control form-control-sm" placeholder="اختياري">
+                        <input type="text" id="new-seller-phone" class="form-control form-control-sm" placeholder="اختياري" aria-label="اختياري" autocomplete="off">
                     </div>
                     <button class="btn btn-primary btn-sm w-100 mt-2" onclick="app.addSeller()"><i class="fas fa-plus"></i> إضافة</button>
                 </div>
@@ -1075,12 +1081,12 @@
                     <div class="modal-body">
                         <div class="mb-3">
                             <label for="add-seller-name" class="form-label">اسم المورد <span class="text-danger">*</span></label>
-                            <input type="text" id="add-seller-name" name="name" class="form-control" placeholder="الاسم أو الشركة" maxlength="100" required>
+                            <input type="text" id="add-seller-name" name="name" class="form-control" placeholder="الاسم أو الشركة" maxlength="100" required autocomplete="off">
                             <div class="invalid-feedback">اسم المورد مطلوب</div>
                         </div>
                         <div class="mb-1">
                             <label for="add-seller-phone" class="form-label">رقم الهاتف / التواصل</label>
-                            <input type="tel" id="add-seller-phone" name="phone" class="form-control" placeholder="اختياري" maxlength="50">
+                            <input type="tel" id="add-seller-phone" name="phone" class="form-control" placeholder="اختياري" maxlength="50" autocomplete="off">
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1156,19 +1162,19 @@
                     <input type="hidden" id="pay-seller-id">
                     <div class="mb-3">
                         <label class="form-label">المورد / البائع:</label>
-                        <input type="text" id="pay-seller-name" class="form-control" readonly disabled>
+                        <input type="text" id="pay-seller-name" class="form-control" readonly disabled aria-label="المورد / البائع" autocomplete="off">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">إجمالي الدين الحالي:</label>
-                        <input type="text" id="pay-seller-debt" class="form-control fw-bold text-danger" readonly disabled>
+                        <input type="text" id="pay-seller-debt" class="form-control fw-bold text-danger" readonly disabled aria-label="إجمالي الدين الحالي" autocomplete="off">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">المبلغ المراد سداده:</label>
-                        <input type="number" id="pay-seller-amount" class="form-control" min="0.01" step="any" required>
+                        <input type="number" id="pay-seller-amount" class="form-control" min="0.01" step="any" required aria-label="المبلغ المراد سداده">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظة / بيان (اختياري):</label>
-                        <input type="text" id="pay-seller-note" class="form-control" placeholder="مثال: دفعة من الحساب...">
+                        <input type="text" id="pay-seller-note" class="form-control" placeholder="مثال: دفعة من الحساب..." aria-label="مثال: دفعة من الحساب..." autocomplete="off">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1192,31 +1198,31 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">المنتج:</label>
-                            <select id="edit-purchase-product" class="form-select"></select>
+                            <select id="edit-purchase-product" class="form-select" aria-label="المنتج"></select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">المورد:</label>
-                            <select id="edit-purchase-seller" class="form-select"></select>
+                            <select id="edit-purchase-seller" class="form-select" aria-label="المورد"></select>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">الكمية:</label>
-                            <input type="number" id="edit-purchase-qty" class="form-control" min="0.01" step="any">
+                            <input type="number" id="edit-purchase-qty" class="form-control" min="0.01" step="any" aria-label="الكمية">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">سعر التكلفة:</label>
-                            <input type="number" id="edit-purchase-cost" class="form-control" min="0" step="0.01">
+                            <input type="number" id="edit-purchase-cost" class="form-control" min="0" step="0.01" aria-label="سعر التكلفة">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">المبلغ المدفوع:</label>
-                            <input type="number" id="edit-purchase-paid" class="form-control" min="0" step="0.01">
+                            <input type="number" id="edit-purchase-paid" class="form-control" min="0" step="0.01" aria-label="المبلغ المدفوع">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">التاريخ:</label>
-                            <input type="datetime-local" id="edit-purchase-date" class="form-control" step="1">
+                            <input type="datetime-local" id="edit-purchase-date" class="form-control" step="1" aria-label="التاريخ">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">ملاحظات:</label>
-                            <input type="text" id="edit-purchase-note" class="form-control">
+                            <input type="text" id="edit-purchase-note" class="form-control" aria-label="ملاحظات" autocomplete="off">
                         </div>
                     </div>
                 </div>
@@ -1243,15 +1249,15 @@
                     <input type="hidden" id="edit-payment-id">
                     <div class="mb-3">
                         <label class="form-label">المورد:</label>
-                        <select id="edit-payment-seller" class="form-select"></select>
+                        <select id="edit-payment-seller" class="form-select" aria-label="المورد"></select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">المبلغ:</label>
-                        <input type="number" id="edit-payment-amount" class="form-control" min="0.01" step="any">
+                        <input type="number" id="edit-payment-amount" class="form-control" min="0.01" step="any" aria-label="المبلغ">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ملاحظات:</label>
-                        <input type="text" id="edit-payment-note" class="form-control">
+                        <input type="text" id="edit-payment-note" class="form-control" aria-label="ملاحظات" autocomplete="off">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -1319,7 +1325,7 @@
                         <div class="row g-3 mb-4">
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">تكرار النسخ الاحتياطي</label>
-                                <select class="form-select" id="setting-backup-interval" name="backup_interval">
+                                <select class="form-select" id="setting-backup-interval" name="backup_interval" aria-label="تكرار النسخ الاحتياطي">
                                     <option value="0">معطل</option>
                                     <option value="21600">كل 6 ساعات</option>
                                     <option value="43200">كل 12 ساعة</option>
@@ -1329,7 +1335,7 @@
                             <div class="col-md-6">
                                 <label class="form-label fw-semibold">الاحتفاظ بالنسخ المحلية (أيام)</label>
                                 <input type="number" class="form-control" id="setting-keep-local-days"
-                                       name="keep_local_days" min="1" max="365" placeholder="14">
+                                       name="keep_local_days" min="1" max="365" placeholder="14" aria-label="14">
                             </div>
                         </div>
 
@@ -1342,12 +1348,12 @@
                             <div class="col-12">
                                 <label class="form-label fw-semibold">Bot Token</label>
                                 <input type="text" class="form-control font-monospace" id="setting-telegram-token"
-                                       name="telegram_token" placeholder="123456:ABC-DEF..." dir="ltr" autocomplete="off">
+                                       name="telegram_token" placeholder="123456:ABC-DEF..." dir="ltr" autocomplete="off" aria-label="123456:ABC-DEF...">
                             </div>
                             <div class="col-12">
                                 <label class="form-label fw-semibold">Chat ID</label>
                                 <input type="text" class="form-control font-monospace" id="setting-telegram-chat-id"
-                                       name="telegram_chat_id" placeholder="-100123456789" dir="ltr" autocomplete="off">
+                                       name="telegram_chat_id" placeholder="-100123456789" dir="ltr" autocomplete="off" aria-label="-100123456789">
                                 <div class="form-text">اتركهما فارغَين إذا لم تريد إرسال النسخ إلى تيليجرام.</div>
                             </div>
                         </div>
